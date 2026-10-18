@@ -397,12 +397,31 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
   .feed-head{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
   .notif{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 }
+/* 多语言 */
+.lang-row{display:flex;align-items:center;gap:8px;color:var(--muted)}
+.lang-sel{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:8px;padding:5px 8px;font-size:13px;max-width:100%}
+.lang-sel.big{font-size:15px;padding:8px 10px;width:100%}
+.ob-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+:root[lang="ja"]{--sans:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif}
+:root[lang="zh-TW"]{--sans:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif}
+:root[lang="ko"]{--sans:"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",system-ui,sans-serif}
+:root[lang="ar"]{--sans:"Geeza Pro","Noto Sans Arabic","Segoe UI",Tahoma,system-ui,sans-serif}
+:root[lang="hi"]{--sans:"Kohinoor Devanagari","Noto Sans Devanagari","Nirmala UI",system-ui,sans-serif}
+:root:is([lang="en"],[lang="es"],[lang="fr"],[lang="de"],[lang="pt"],[lang="ru"]){--sans:-apple-system,system-ui,"Segoe UI","Noto Sans",Roboto,"Noto Sans SC",sans-serif}
+/* 阿拉伯语从右往左 */
+[dir="rtl"] .replies,[dir="rtl"] .aiout{border-left:0;border-right:2px solid var(--line);padding-left:0;padding-right:12px}
+[dir="rtl"] .aiout{border-right-color:var(--green)}
+[dir="rtl"] .conv.on{box-shadow:inset -3px 0 0 var(--green)}
+[dir="rtl"] .search svg,[dir="rtl"] .repost-head svg{transform:scaleX(-1)}
+[dir="rtl"] .quote-box .x{right:auto;left:6px}
+[dir="rtl"] .bub.mine{border-bottom-right-radius:16px;border-bottom-left-radius:4px}
+[dir="rtl"] .bub.them{border-bottom-left-radius:16px;border-bottom-right-radius:4px}
 </style>
 
 </head><body>
 <div class="app">
   <nav class="nav" aria-label="主导航">
-    <div class="brand"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--ink)"/><path d="M9 7h14l5 18H4z" fill="#00BB77" opacity=".22"/><rect x="9" y="7" width="14" height="10" rx="1.5" fill="#00BB77"/><path d="M16 7v10M9 12h14" stroke="var(--ink)" stroke-width="1.6"/></svg><b>天窗</b><span>Skylight</span></div>
+    <div class="brand"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--ink)"/><path d="M9 7h14l5 18H4z" fill="#00BB77" opacity=".22"/><rect x="9" y="7" width="14" height="10" rx="1.5" fill="#00BB77"/><path d="M16 7v10M9 12h14" stroke="var(--ink)" stroke-width="1.6"/></svg><b data-noi18n>天窗</b><span>Skylight</span></div>
     <a href="#" class="on" data-go="plaza"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>首页</span></a>
     <a href="#" data-go="notif"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg><span>通知</span><i class="badge-n" id="bNotif" hidden></i></a>
     <a href="#" data-go="dm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>加密私信</span><i class="badge-n" id="bDM" hidden></i></a>
@@ -419,7 +438,7 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
   </nav>
 
   <main class="main">
-    <div class="mhead"><b style="display:flex;align-items:center;gap:8px"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--ink)"/><path d="M9 7h14l5 18H4z" fill="#00BB77" opacity=".22"/><rect x="9" y="7" width="14" height="10" rx="1.5" fill="#00BB77"/><path d="M16 7v10M9 12h14" stroke="var(--ink)" stroke-width="1.6"/></svg>天窗</b><input id="q2" class="msearch" placeholder="搜索全网" enterkeyhint="search" autocomplete="off"><span class="key" id="mNet">连接中继…</span></div>
+    <div class="mhead"><b style="display:flex;align-items:center;gap:8px"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--ink)"/><path d="M9 7h14l5 18H4z" fill="#00BB77" opacity=".22"/><rect x="9" y="7" width="14" height="10" rx="1.5" fill="#00BB77"/><path d="M16 7v10M9 12h14" stroke="var(--ink)" stroke-width="1.6"/></svg><span data-noi18n>天窗</span></b><input id="q2" class="msearch" placeholder="搜索全网" enterkeyhint="search" autocomplete="off"><span class="key" id="mNet">连接中继…</span></div>
     <div class="tabs" role="tablist">
       <button class="on" data-tab="plaza" role="tab">天窗广场</button>
       <button data-tab="follow" role="tab">关注</button>
@@ -527,7 +546,7 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
     <div class="box">
       <div class="eyebrow">AI 研究助手</div>
       <h3>问问信息流</h3>
-      <div class="chat" id="chat"><div class="msg a">我能读到当前加载的帖子。试试："大家对美债怎么看？分歧在哪？"</div></div>
+      <div class="chat" id="chat"><div class="msg a" id="chatHello">我能读到当前加载的帖子。试试："大家对美债怎么看？分歧在哪？"</div></div>
       <form class="ask" id="askForm"><input id="askIn" placeholder="向 AI 提问…" autocomplete="off"><button>问</button></form>
     </div>
 
@@ -550,7 +569,8 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
       <div class="eyebrow">正在热议</div>
       <div class="trend" id="trend" style="margin-top:8px"></div>
     </div>
-    <p class="foot">天窗 0.3.0 · 基于 Nostr 协议</p>
+    <div class="lang-row"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><select class="lang-sel" id="langSide" aria-label="Language"></select></div>
+    <p class="foot"><span>天窗</span> 0.4.0 · <span>基于 Nostr 协议</span></p>
   </aside>
 </div>
 
@@ -565,7 +585,7 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
 <!-- 首次启动：创建或导入身份 -->
 <div class="scrim" id="onboard" hidden>
   <div class="sheet" role="dialog" aria-labelledby="obTitle">
-    <h2 id="obTitle">欢迎来到天窗</h2>
+    <div class="ob-top"><h2 id="obTitle">欢迎来到天窗</h2><select class="lang-sel" id="langOb" aria-label="Language"></select></div>
     <p class="hint" id="obHint">天窗没有注册，也没有手机号。你的账号就是一把密钥，只生成在你自己的设备上，谁也收不走。</p>
     <div class="choice" id="obChoice">
       <button class="on" data-ob="new"><b>创建新身份</b><span>第一次使用 Nostr</span></button>
@@ -638,6 +658,9 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
 <div class="scrim" id="settings" hidden>
   <div class="sheet" role="dialog" aria-labelledby="setTitle">
     <h2 id="setTitle">设置</h2>
+    <label class="fl" for="langSet">语言 · Language</label>
+    <select class="lang-sel big" id="langSet"></select>
+    <hr>
     <div class="fl">解锁密码</div>
     <p class="hint" id="pinState"></p>
     <input id="pinNew" type="password" placeholder="新密码（至少 6 位）" autocomplete="new-password">
@@ -667,12 +690,13 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
     <div class="seg" id="themeSeg"><button data-th="">跟随系统</button><button data-th="light">浅色</button><button data-th="dark">深色</button></div>
     <hr>
     <button class="ghost" id="logout" style="justify-self:start;color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent)">退出账号（从本机删除私钥）</button>
-    <p class="hint">天窗 0.3.0 · 代码指纹 <span class="mono-in">74de 6be9 bd58 016d</span><br>指纹和 GitHub 仓库里 FINGERPRINT.txt 一致，说明你运行的代码没被替换。</p>
+    <p class="hint"><span>天窗</span> 0.4.0 · <span>代码指纹</span> <span class="mono-in">bd59 c8bf 0597 50c7</span><br><span>指纹和 GitHub 仓库里 FINGERPRINT.txt 一致，说明你运行的代码没被替换。</span></p>
     <button class="ghost close" id="closeSettings">完成</button>
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
 
 <script src="vendor/nostr.bundle.js" integrity="sha384-7QhkjSj3gv2n85FuieRm3v1PhqM4Ux9EELcYHVSkMiCw+Y6DMhCNnHpkPHRjYmcN"></script>
-<script src="app.js" integrity="sha384-VxQJitaf0yEWF43pGjZb4jKesbBOZOnDWdu5eDnKDv0afIH7XJBephfcWagBqQRE"></script>
+<script src="vendor/i18n.js" integrity="sha384-sOOiLmayQY5noIWtgSCGc0XqNggwMYtNli0Z6dx6H6ncAnUtwjw4mWmMYuWr+omC"></script>
+<script src="app.js" integrity="sha384-jXGHkxGgqGU0Hac3PDDqpAFptXD+xfuyWQg0S93pmDzYrwK3eDD+HEx/RKs2eWyZ"></script>
 </body></html>
