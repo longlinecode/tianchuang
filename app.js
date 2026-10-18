@@ -12,15 +12,92 @@ const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const isHex = (s, n) => typeof s === "string" && new RegExp(`^[0-9a-f]{${n}}$`).test(s);
 const ls = { get(k, d = null) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }, del(k) { try { localStorage.removeItem(k); } catch (e) {} } };
 function toast(m) { const t = $("#toast"); t.textContent = m; t.hidden = false; clearTimeout(toast.k); toast.k = setTimeout(() => (t.hidden = true), 2800); }
-async function copy(text) { try { await navigator.clipboard.writeText(text); toast("已复制"); } catch (e) { toast("复制失败，请手动选中复制"); } }
+async function copy(text) { try { await navigator.clipboard.writeText(text); toast(tr("已复制")); } catch (e) { toast(tr("复制失败，请手动选中复制")); } }
+
+/* ======================= 多语言 ======================= */
+const LANGS = [["zh-Hans", "简体中文"], ["zh-Hant", "繁體中文"], ["en", "English"], ["es", "Español"], ["fr", "Français"], ["de", "Deutsch"], ["pt", "Português"], ["ru", "Русский"], ["ar", "العربية"], ["hi", "हिन्दी"], ["ja", "日本語"], ["ko", "한국어"]];
+const LANG_EN = { "zh-Hans": "Simplified Chinese", "zh-Hant": "Traditional Chinese", en: "English", es: "Spanish", fr: "French", de: "German", pt: "Portuguese", ru: "Russian", ar: "Arabic", hi: "Hindi", ja: "Japanese", ko: "Korean" };
+function detectLang() {
+  const saved = ls.get("tc-lang", "");
+  if (LANGS.some((l) => l[0] === saved)) return saved;
+  for (const l of navigator.languages || [navigator.language || "en"]) {
+    const x = String(l).toLowerCase();
+    if (x.startsWith("zh")) return /tw|hk|mo|hant/.test(x) ? "zh-Hant" : "zh-Hans";
+    const m = LANGS.find((L) => L[0] === x.split("-")[0]); if (m) return m[0];
+  }
+  return "en";
+}
+let LANG = detectLang();
+const DICT = window.TC_I18N || {};
+function tr(src, ...a) {
+  const s = (LANG !== "zh-Hans" && DICT[LANG] && DICT[LANG][src]) || src;
+  return a.length ? s.replace(/\{(\d)\}/g, (m, k) => (a[k] ?? "")) : s;
+}
+const LOCALE = () => ({ "zh-Hans": "zh-CN", "zh-Hant": "zh-TW" }[LANG] || LANG);
+const APP = () => tr("天窗");
+const NOTIF_VERB = { like: "{0} 赞了你的帖子", reply: "{0} 回复了你", mention: "{0} 提到了你", quote: "{0} 引用了你的帖子", repost: "{0} 转发了你的帖子", follow: "{0} 关注了你" };
+const fileLabel = (f) => (f.mime.startsWith("image/") ? tr("〔图片〕") : f.mime.startsWith("video/") ? tr("〔视频〕") : tr("〔文件〕"));
+/* 静态界面文字：记住中文原文，切换语言时整页重译；用户内容区域一律跳过 */
+const SKIP_I18N = "script,style,#feed,#msgs,#convs,#panelBody,#chat,#net,#trend,#muteList,#quoteBox,#mentionBox,#composeAI,#toast,.mono,[data-noi18n],#thName,#meName,#meName2,#upState,#pfPicState,.lang-sel";
+const CJK_RE = /[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/;
+const textSrc = new WeakMap();
+function translateStatic(root = document.body) {
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), nodes = [];
+  while (w.nextNode()) nodes.push(w.currentNode);
+  for (const n of nodes) {
+    if (!n.parentElement || n.parentElement.closest(SKIP_I18N)) continue;
+    let src = textSrc.get(n);
+    if (src === undefined) { if (!CJK_RE.test(n.nodeValue)) continue; src = n.nodeValue; textSrc.set(n, src); }
+    const core = src.trim(); if (!core) continue;
+    n.nodeValue = src.slice(0, src.indexOf(core)) + tr(core) + src.slice(src.indexOf(core) + core.length);
+  }
+  for (const el of root.querySelectorAll("[placeholder],[title],[aria-label]")) {
+    if (el.closest(SKIP_I18N)) continue;
+    for (const at of ["placeholder", "title", "aria-label"]) {
+      if (!el.hasAttribute(at)) continue;
+      let src = el.getAttribute("data-src-" + at);
+      if (src === null) { const v = el.getAttribute(at); if (!CJK_RE.test(v)) continue; src = v; el.setAttribute("data-src-" + at, src); }
+      el.setAttribute(at, tr(src));
+    }
+  }
+}
+function fillLangSelects() {
+  const html = LANGS.map(([k, n]) => `<option value="${k}" ${k === LANG ? "selected" : ""}>${n}</option>`).join("");
+  $$(".lang-sel").forEach((s) => { s.innerHTML = html; s.value = LANG; });
+}
+const HELLO_SRC = document.getElementById("chatHello")?.textContent || "";
+function applyLang() {
+  const h = document.getElementById("chatHello"); if (h && HELLO_SRC) h.textContent = tr(HELLO_SRC.trim());
+  document.documentElement.lang = LOCALE();
+  document.documentElement.dir = LANG === "ar" ? "rtl" : "ltr";
+  fillLangSelects();
+  translateStatic();
+  if (window.tcApp && window.tcApp.setLang) window.tcApp.setLang(LANG);
+}
+function setLang(l) {
+  if (!LANGS.some((x) => x[0] === l) || l === LANG) return;
+  LANG = l; ls.set("tc-lang", l); rtf = null;
+  if (!$("#onboard").hidden) setOnboardTexts();
+  if (pk) {
+    renderMe(); renderNet(); updateFollowCount(); renderMuteList(); renderTrend();
+    if (tab === "dm") { renderConvs(); renderThread(); } else render();
+    renderPanel(); updateBadges();
+    if (!$("#settings").hidden) $("#openSettings").click();
+    if (curConv && convs.get(curConv)) renderThread();
+    if (tab === "search") $("#tabSearch").textContent = tr("搜索：{0}", searchQ.length > 8 ? searchQ.slice(0, 8) + "…" : searchQ);
+  }
+  applyLang();
+}
+document.addEventListener("change", (e) => { if (e.target.classList && e.target.classList.contains("lang-sel")) setLang(e.target.value); });
 
 const DEFAULT_RELAYS = ["wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom", "wss://relay.snort.social", "wss://offchain.pub", "wss://relay.damus.io"];
 const DEFAULT_SEARCH = ["wss://search.nos.today", "wss://nostr.wine"];
 const BLOSSOM = ["https://blossom.primal.net", "https://nostr.download"];
 const TC_TAG = "tianchuang";
 const IS_MAC = !!window.tcVault;
-const scamRe = /保本|稳赚|稳定.{0,4}收益|翻倍|带单|内部票|进群|私信领取/;
+const scamRe = /保本|稳赚|稳定.{0,4}收益|翻倍|带单|内部票|进群|私信领取|保證獲利|穩賺|guaranteed (returns?|profits?|income)|risk[- ]free (profit|returns?)|double your (money|crypto|investment)|join (my|our) (telegram|whatsapp|vip|signal)|dm me (to|for) (join|signals)|ganancias? garantizadas?|rentabilidad garantizada|rendement garanti|profit garanti|garantierte (rendite|gewinne?)|lucro garantido|retorno garantido|гарантированн\S* (доход|прибыл)|без риска|元本保証|確実に儲か|원금 보장|확정 수익|ربح مضمون|عائد مضمون|गारंटीड (रिटर्न|मुनाफा)/i;
 const holdLab = { none: ["未持仓", "ok"], long: ["作者持有多头", ""], short: ["作者持有空头", ""], paid: ["含商业推广", "warn"] };
+const HOLD_EN = { none: "no position", long: "author is long", short: "author is short", paid: "paid promotion" };
 const ICON = {
   reply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.5A8 8 0 1 1 21 12z"/></svg>',
   repost: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></svg>',
@@ -93,14 +170,21 @@ const colorOf = (p) => ["#00BB77", "#0b0d0c", "#FA003F", "#6b726f"][parseInt(Str
 const ini = (s) => [...String(s).trim()][0] || "?";
 const tag = (ev, k) => (ev.tags.find((t) => t[0] === k) || [])[1];
 const hasP = (ev, p) => ev.tags.some((t) => t[0] === "p" && t[1] === p);
-function ago(ts) { const d = now() - ts; if (d < 60) return "刚刚"; if (d < 3600) return Math.floor(d / 60) + "分钟"; if (d < 86400) return Math.floor(d / 3600) + "小时"; if (d < 86400 * 30) return Math.floor(d / 86400) + "天前"; return new Date(ts * 1000).toLocaleDateString("zh-CN"); }
+let rtf = null;
+function ago(ts) {
+  const d = now() - ts;
+  if (d < 60) return tr("刚刚");
+  try { rtf = rtf && rtf.resolvedOptions().locale === new Intl.RelativeTimeFormat(LOCALE()).resolvedOptions().locale ? rtf : new Intl.RelativeTimeFormat(LOCALE(), { numeric: "auto", style: "short" }); } catch (e) { rtf = null; }
+  if (rtf) { if (d < 3600) return rtf.format(-Math.floor(d / 60), "minute"); if (d < 86400) return rtf.format(-Math.floor(d / 3600), "hour"); if (d < 86400 * 30) return rtf.format(-Math.floor(d / 86400), "day"); }
+  return new Date(ts * 1000).toLocaleDateString(LOCALE());
+}
 function decodeNpub(s) {
   s = String(s).trim().replace(/^nostr:/, "");
   if (isHex(s.toLowerCase(), 64)) return s.toLowerCase();
   const d = nip19.decode(s);
   if (d.type === "npub") return d.data;
   if (d.type === "nprofile") return d.data.pubkey;
-  throw new Error("不是有效的 npub");
+  throw new Error(tr("不是有效的 npub"));
 }
 function avatarHTML(p, cls = "avatar", attrs = "") {
   const pr = profiles.get(p);
@@ -148,27 +232,30 @@ async function boot() {
   let saved = null;
   try { saved = await store.get(); } catch (e) {}
   if (!saved) {
-    $("#obHint").textContent = IS_MAC
-      ? "天窗没有注册，也没有手机号。你的账号就是一把密钥，生成在这台电脑上，加密存进 macOS 钥匙串，谁也收不走。"
-      : "天窗没有注册，也没有手机号。你的账号就是一把密钥，只保存在这台设备上。创建后请立刻备份私钥：清除网站数据或换手机，都需要用它找回账号。";
-    $("#obPinLabel").textContent = IS_MAC ? "解锁密码（可选，已有钥匙串保护）" : "解锁密码（强烈建议）";
+setOnboardTexts();
     $("#onboard").hidden = false; return;
   }
   if (saved.startsWith("enc1:")) { storedBlob = saved; $("#lock").hidden = false; setTimeout(() => $("#lockIn").focus(), 50); return; }
   unlockWith(saved);
 }
+function setOnboardTexts() {
+    $("#obHint").textContent = IS_MAC
+      ? tr("天窗没有注册，也没有手机号。你的账号就是一把密钥，生成在这台电脑上，加密存进 macOS 钥匙串，谁也收不走。")
+      : tr("天窗没有注册，也没有手机号。你的账号就是一把密钥，只保存在这台设备上。创建后请立刻备份私钥：清除网站数据或换手机，都需要用它找回账号。");
+    $("#obPinLabel").textContent = IS_MAC ? tr("解锁密码（可选，已有钥匙串保护）") : tr("解锁密码（强烈建议）");
+}
 function unlockWith(hex) { sk = fromHex(hex); pk = getPublicKey(sk); start(); }
 $("#lockForm").onsubmit = async (e) => {
   e.preventDefault();
   const pin = $("#lockIn").value; if (!pin) return;
-  $("#lockGo").textContent = "解锁中…"; $("#lockGo").disabled = true; $("#lockErr").hidden = true;
+  $("#lockGo").textContent = tr("解锁中…"); $("#lockGo").disabled = true; $("#lockErr").hidden = true;
   try { const hex = await openSecret(storedBlob, pin); $("#lockIn").value = ""; $("#lock").hidden = true; unlockWith(hex); }
-  catch (err) { $("#lockErr").textContent = "密码不对，再试一次。"; $("#lockErr").hidden = false; }
-  $("#lockGo").textContent = "解锁"; $("#lockGo").disabled = false;
+  catch (err) { $("#lockErr").textContent = tr("密码不对，再试一次。"); $("#lockErr").hidden = false; }
+  $("#lockGo").textContent = tr("解锁"); $("#lockGo").disabled = false;
 };
 $("#lockForgot").onclick = async () => {
   const b = $("#lockForgot");
-  if (b.dataset.confirm !== "1") { b.dataset.confirm = "1"; b.textContent = "确认：删除本机私钥，用备份重新导入"; return; }
+  if (b.dataset.confirm !== "1") { b.dataset.confirm = "1"; b.textContent = tr("确认：删除本机私钥，用备份重新导入"); return; }
   await store.clear(); location.reload();
 };
 let hiddenAt = 0;
@@ -204,21 +291,21 @@ async function start() {
 /* ---------- 首次启动 ---------- */
 let obMode = "new";
 $("#obChoice").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; obMode = b.dataset.ob; $$("#obChoice button").forEach((x) => x.classList.toggle("on", x === b)); $("#obNew").hidden = obMode !== "new"; $("#obImport").hidden = obMode !== "import"; };
-function checkPin(a, b) { if (!a && !b) return ""; if (a.length < 6) throw new Error("解锁密码至少 6 位"); if (a !== b) throw new Error("两次输入的解锁密码不一样"); return a; }
+function checkPin(a, b) { if (!a && !b) return ""; if (a.length < 6) throw new Error(tr("解锁密码至少 6 位")); if (a !== b) throw new Error(tr("两次输入的解锁密码不一样")); return a; }
 $("#obGo").onclick = async () => {
   $("#obErr").hidden = true;
   try {
     const pin = checkPin($("#obPin").value, $("#obPin2").value);
     let bytes;
     if (obMode === "new") {
-      if (!$("#obName").value.trim()) throw new Error("给自己起个昵称");
+      if (!$("#obName").value.trim()) throw new Error(tr("给自己起个昵称"));
       bytes = generateSecretKey();
     } else {
       const v = $("#obNsec").value.trim();
       if (isHex(v.toLowerCase(), 64)) bytes = fromHex(v.toLowerCase());
-      else { const d = nip19.decode(v); if (d.type !== "nsec") throw new Error("请粘贴 nsec 开头的私钥"); bytes = d.data; }
+      else { const d = nip19.decode(v); if (d.type !== "nsec") throw new Error(tr("请粘贴 nsec 开头的私钥")); bytes = d.data; }
     }
-    $("#obGo").textContent = "正在加密保存…"; $("#obGo").disabled = true;
+    $("#obGo").textContent = tr("正在加密保存…"); $("#obGo").disabled = true;
     const hex = toHex(bytes);
     if (pin) { storedBlob = await sealSecret(hex, pin); await store.set(storedBlob); } else await store.set(hex);
     $("#obPin").value = $("#obPin2").value = "";
@@ -231,8 +318,8 @@ $("#obGo").onclick = async () => {
       await publishProfile({ name, headline: head, about: "" });
       await publish({ kind: 10050, created_at: now(), content: "", tags: relays.map((r) => ["relay", r]) });
       openProfile(true);
-    } else toast("已导入，正在从中继同步你的资料、关注和私信");
-  } catch (e) { $("#obErr").textContent = e.message || "私钥格式不对"; $("#obErr").hidden = false; $("#obGo").textContent = "进入天窗"; $("#obGo").disabled = false; }
+    } else toast(tr("已导入，正在从中继同步你的资料、关注和私信"));
+  } catch (e) { $("#obErr").textContent = e.message || tr("私钥格式不对"); $("#obErr").hidden = false; $("#obGo").textContent = tr("进入天窗"); $("#obGo").disabled = false; }
 };
 
 /* ======================= 中继 ======================= */
@@ -254,8 +341,8 @@ function refreshRelayState() {
 }
 function renderNet() {
   const up = relays.filter((u) => relayState.get(u)?.ok).length;
-  $("#net").innerHTML = relays.map((u) => { const s = relayState.get(u) || {}; return `<span class="dot ${s.ok === false ? "off" : ""}" style="${s.ok == null ? "background:var(--line)" : ""}"></span><span class="url">${esc(u.replace("wss://", ""))}</span><span class="n">${s.ok ? (s.ms ?? "—") + " ms" : s.ok === false ? "不可达" : "连接中"}</span>`; }).join("");
-  $("#mNet").textContent = `${up}/${relays.length} 中继`;
+  $("#net").innerHTML = relays.map((u) => { const s = relayState.get(u) || {}; return `<span class="dot ${s.ok === false ? "off" : ""}" style="${s.ok == null ? "background:var(--line)" : ""}"></span><span class="url">${esc(u.replace("wss://", ""))}</span><span class="n">${s.ok ? (s.ms ?? "—") + " ms" : s.ok === false ? tr("不可达") : tr("连接中")}</span>`; }).join("");
+  $("#mNet").textContent = tr("{0}/{1} 中继", up, relays.length);
 }
 
 /* ======================= 订阅 ======================= */
@@ -411,8 +498,7 @@ function addNotif(key, n) {
   notifs.set(key, n); needProfile(n.from);
   if (n.ref) needEvent(n.ref);
   if (!booting && n.at > notifSeen && n.at > now() - 300 && !mutes.has(n.from)) {
-    const verb = { like: "赞了你的帖子", reply: "回复了你", mention: "提到了你", quote: "引用了你的帖子", repost: "转发了你的帖子", follow: "关注了你" }[n.type];
-    nativeNotify("天窗", `${nameOf(n.from)} ${verb}`);
+    nativeNotify(APP(), tr(NOTIF_VERB[n.type], nameOf(n.from)));
   }
 }
 const unreadNotif = () => [...notifs.values()].filter((n) => n.at > notifSeen && !mutes.has(n.from)).length;
@@ -423,7 +509,7 @@ function updateBadges() {
   if (!pk) return;
   const n = unreadNotif(), d = unreadDM(), total = n + d;
   setBadgeEl("#bNotif", n); setBadgeEl("#bNotif2", n); setBadgeEl("#bDM", d); setBadgeEl("#bDM2", d);
-  document.title = total ? `(${total}) 天窗` : "天窗";
+  document.title = total ? `(${total}) ${APP()}` : APP();
   if (window.tcApp) window.tcApp.setBadge(total);
   else if (navigator.setAppBadge) { (total ? navigator.setAppBadge(total) : navigator.clearAppBadge()).catch(() => {}); }
 }
@@ -463,13 +549,13 @@ async function setFollow(target, on) {
   const tags = (contactsEv?.tags || []).filter((t) => !(t[0] === "p" && t[1] === target));
   if (on) tags.push(["p", target]);
   const { ok } = await publish({ kind: 3, created_at: now(), tags, content: contactsEv?.content || "" });
-  toast(on ? `已关注 ${nameOf(target)} · 写入 ${ok} 个中继` : `已取消关注`);
+  toast(on ? tr("已关注 {0} · 写入 {1} 个中继", nameOf(target), ok) : tr("已取消关注"));
 }
-function updateFollowCount() { $("#followCount").textContent = follows.size ? `你关注了 ${follows.size} 个人。` : "你还没有关注任何人。"; }
+function updateFollowCount() { $("#followCount").textContent = follows.size ? tr("你关注了 {0} 个人。", follows.size) : tr("你还没有关注任何人。"); }
 
 /* ---------- 关系网（反垃圾）：我关注的人 + 他们关注的人 ---------- */
 async function loadFof(fromToggle) {
-  if (!follows.size) { if (fromToggle) toast("先关注几个人，关系网过滤才有内容"); return; }
+  if (!follows.size) { if (fromToggle) toast(tr("先关注几个人，关系网过滤才有内容")); return; }
   if (fofLoaded || !pool) return;
   fofLoaded = true;
   const evs = await pool.querySync(relays, { kinds: [3], authors: [...follows].slice(0, 300) }, { maxWait: 6000 });
@@ -501,11 +587,11 @@ async function uploadBlossom(file, type) {
   for (const server of servers) {
     try {
       const r = await fetch(server + "/upload", { method: "PUT", headers: { Authorization: header, "Content-Type": type || file.type || "application/octet-stream" }, body: file });
-      if (!r.ok) { lastErr = server.replace("https://", "") + " 返回 " + r.status; continue; }
+      if (!r.ok) { lastErr = tr("{0} 返回 {1}", server.replace("https://", ""), r.status); continue; }
       const j = await r.json(); if (j.url) return { url: j.url, hash };
-    } catch (e) { lastErr = server.replace("https://", "") + " 连不上"; }
+    } catch (e) { lastErr = tr("{0} 连不上", server.replace("https://", "")); }
   }
-  throw new Error(lastErr || "上传失败");
+  throw new Error(lastErr || tr("上传失败"));
 }
 async function encryptFile(blob) {
   const keyBytes = crypto.getRandomValues(new Uint8Array(32)), nonce = crypto.getRandomValues(new Uint8Array(12));
@@ -514,7 +600,7 @@ async function encryptFile(blob) {
   return { blob: new Blob([ct], { type: "application/octet-stream" }), key: toHex(keyBytes), nonce: toHex(nonce) };
 }
 async function decryptFile(f) {
-  const r = await fetch(f.url); if (!r.ok) throw new Error("下载失败");
+  const r = await fetch(f.url); if (!r.ok) throw new Error(tr("下载失败"));
   const k = await crypto.subtle.importKey("raw", fromHex(f.key), "AES-GCM", false, ["decrypt"]);
   const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: fromHex(f.nonce) }, k, await r.arrayBuffer());
   return URL.createObjectURL(new Blob([pt], { type: f.mime }));
@@ -552,8 +638,8 @@ function renderContent(text, depth = 0) {
       try {
         const d = nip19.decode(code);
         if (d.type === "npub" || d.type === "nprofile") { const p = d.type === "npub" ? d.data : d.data.pubkey; needProfile(p); return `<a href="#" class="mention" data-user="${p}">@${esc(nameOf(p))}</a>`; }
-        if (d.type === "note" || d.type === "nevent") { const id = d.type === "note" ? d.data : d.data.id; if (depth === 0) { quotes.push(id); return ""; } return "〔引用〕"; }
-        if (d.type === "naddr") { const ev = [...posts.values()].find((p) => p.kind === d.data.kind && p.pubkey === d.data.pubkey && (tag(p, "d") || "") === d.data.identifier); if (ev && depth === 0) { quotes.push(ev.id); return ""; } return "〔长文〕"; }
+        if (d.type === "note" || d.type === "nevent") { const id = d.type === "note" ? d.data : d.data.id; if (depth === 0) { quotes.push(id); return ""; } return tr("〔引用〕"); }
+        if (d.type === "naddr") { const ev = [...posts.values()].find((p) => p.kind === d.data.kind && p.pubkey === d.data.pubkey && (tag(p, "d") || "") === d.data.identifier); if (ev && depth === 0) { quotes.push(ev.id); return ""; } return tr("〔长文〕"); }
       } catch (e) {}
       return m;
     })
@@ -562,9 +648,9 @@ function renderContent(text, depth = 0) {
 }
 function quoteHTML(id) {
   const ev = events.get(id);
-  if (!ev) { needEvent(id); return `<div class="quote"><span class="qhead">正在加载引用的内容…</span></div>`; }
+  if (!ev) { needEvent(id); return `<div class="quote"><span class="qhead">${tr("正在加载引用的内容…")}</span></div>`; }
   const t = tag(ev, "title");
-  const body = (t ? t + "：" : "") + ev.content.replace(urlRe, (u) => (mediaKind(u) ? "〔媒体〕" : u)).replace(refRe, "").trim();
+  const body = (t ? t + tr("：") : "") + ev.content.replace(urlRe, (u) => (mediaKind(u) ? tr("〔媒体〕") : u)).replace(refRe, "").trim();
   return `<div class="quote" data-post="${ev.id}"><span class="qhead"><b>${esc(nameOf(ev.pubkey))}</b> · ${ago(ev.created_at)}</span><div>${renderContent(body.slice(0, 280) + (body.length > 280 ? "…" : ""), 1).html}</div></div>`;
 }
 function postHTML(ev, opts = {}) {
@@ -574,64 +660,64 @@ function postHTML(ev, opts = {}) {
   const lk = likes.get(ev.id), liked = lk?.has(pk), rp = replies.get(ev.id), rps = reposts.get(ev.id), reposted = rps?.has(pk), bm = bookmarks.has(ev.id);
   const tagsList = ev.tags.filter((t) => t[0] === "t" && t[1] !== TC_TAG).map((t) => t[1]).slice(0, 6);
   let head = "";
-  if (opts.repostBy) head = `<div class="repost-head">${ICON.repost}<span>${esc(nameOf(opts.repostBy))} 转发了</span></div>`;
+  if (opts.repostBy) head = `<div class="repost-head">${ICON.repost}<span>${tr("{0} 转发了", esc(nameOf(opts.repostBy)))}</span></div>`;
   let body = title ? `<div class="ptitle">${esc(title)}</div>` : "";
-  if (folded) body += `<div class="aiout"><span class="h">已折叠</span>这条内容含"承诺收益 / 引流"类话术。内容仍在，你可以选择展开。<br><button class="more" data-unfold="${ev.id}">仍然展开</button></div>`;
+  if (folded) body += `<div class="aiout"><span class="h">${tr("已折叠")}</span>${tr("这条内容含“承诺收益 / 引流”类话术。内容仍在，你可以选择展开。")}<br><button class="more" data-unfold="${ev.id}">${tr("仍然展开")}</button></div>`;
   else {
     const long = ev.kind === 30023 && !openText.has(ev.id);
     const textOnly = ev.content.replace(urlRe, (u) => (mediaKind(u) ? "" : u)).trim();
     const rc = renderContent(textOnly);
     ev.tags.filter((t) => t[0] === "q" && isHex(t[1], 64)).forEach((t) => { if (!rc.quotes.includes(t[1])) rc.quotes.push(t[1]); });
     body += `<div class="text ${long ? "clamp" : ""}">${rc.html}</div>`;
-    if (ev.kind === 30023) body += `<button class="more" data-expand="${ev.id}">${long ? "展开全文" : "收起"}</button>`;
+    if (ev.kind === 30023) body += `<button class="more" data-expand="${ev.id}">${long ? tr("展开全文") : tr("收起")}</button>`;
     body += mediaHTML(ev) + rc.quotes.slice(0, 2).map(quoteHTML).join("");
     if (tagsList.length && ev.kind === 30023) body += `<div class="tags">${tagsList.map((t) => `<a href="#" class="tag" data-hashtag="${esc(t)}">#${esc(t)}</a>`).join("")}</div>`;
   }
   const labs = [];
-  if (disc && holdLab[disc]) labs.push(`<span class="lab ${holdLab[disc][1]}">披露：${holdLab[disc][0]}</span>`);
-  if (scam) labs.push(`<span class="lab warn">规则标注：疑似承诺收益</span>`);
-  if (tag(ev, "client") === "天窗") labs.push(`<span class="lab">来自天窗</span>`);
+  if (disc && holdLab[disc]) labs.push(`<span class="lab ${holdLab[disc][1]}">${tr("披露：{0}", tr(holdLab[disc][0]))}</span>`);
+  if (scam) labs.push(`<span class="lab warn">${tr("规则标注：疑似承诺收益")}</span>`);
+  if (tag(ev, "client") === "天窗") labs.push(`<span class="lab">${tr("来自天窗")}</span>`);
   let rpHTML = "";
   if (openReplies.has(ev.id)) {
     const list = rp ? [...rp.values()].filter((r) => !mutes.has(r.pubkey)).sort((a, b) => a.created_at - b.created_at) : [];
-    rpHTML = `<div class="replies">${list.map((r) => `<div class="reply"><b data-user="${r.pubkey}">${esc(nameOf(r.pubkey))}</b> <span class="time">· ${ago(r.created_at)}</span><div class="text">${renderContent(r.content, 1).html}</div></div>`).join("") || `<div class="reply" style="color:var(--muted)">还没有回复。</div>`}
-      <form class="reply-form" data-reply="${ev.id}"><input id="rp-${ev.id}" placeholder="写回复…" autocomplete="off"><button>回复</button></form></div>`;
+    rpHTML = `<div class="replies">${list.map((r) => `<div class="reply"><b data-user="${r.pubkey}">${esc(nameOf(r.pubkey))}</b> <span class="time">· ${ago(r.created_at)}</span><div class="text">${renderContent(r.content, 1).html}</div></div>`).join("") || `<div class="reply" style="color:var(--muted)">${tr("还没有回复。")}</div>`}
+      <form class="reply-form" data-reply="${ev.id}"><input id="rp-${ev.id}" placeholder="${tr("写回复…")}" autocomplete="off"><button>${tr("回复")}</button></form></div>`;
   }
   let moreHTML = "";
   if (openMore.has(ev.id)) {
     moreHTML = `<div class="more-row">
-      <button data-link="${ev.id}">复制链接</button>
-      ${mine ? `<button class="danger" data-del="${ev.id}">删除这条</button>` : `<button data-dmto="${ev.pubkey}">私信作者</button><button class="danger" data-mute="${ev.pubkey}">屏蔽这个人</button>`}</div>`;
+      <button data-link="${ev.id}">${tr("复制链接")}</button>
+      ${mine ? `<button class="danger" data-del="${ev.id}">${tr("删除这条")}</button>` : `<button data-dmto="${ev.pubkey}">${tr("私信作者")}</button><button class="danger" data-mute="${ev.pubkey}">${tr("屏蔽这个人")}</button>`}</div>`;
   }
   return `<article class="post">
    ${avatarHTML(ev.pubkey)}
    <div style="min-width:0">
     ${head}
     <div class="who" style="display:flex"><b data-user="${ev.pubkey}">${esc(name)}</b><span class="time">· ${ago(ev.created_at)}</span>
-      ${mine ? "" : `<button class="follow-btn ${follows.has(ev.pubkey) ? "on" : ""}" data-follow="${ev.pubkey}">${follows.has(ev.pubkey) ? "已关注" : "关注"}</button>`}</div>
+      ${mine ? "" : `<button class="follow-btn ${follows.has(ev.pubkey) ? "on" : ""}" data-follow="${ev.pubkey}">${follows.has(ev.pubkey) ? tr("已关注") : tr("关注")}</button>`}</div>
     <div class="headline">${esc(pr.headline || short(ev.pubkey))}</div>
     ${body}
     ${labs.length ? `<div class="labels">${labs.join("")}</div>` : ""}
     ${folded ? "" : `<div class="aibar">
-      <button class="aichip" data-ai="sum" data-id="${ev.id}">一句话摘要</button>
-      <button class="aichip" data-ai="counter" data-id="${ev.id}">反方观点</button>
-      <button class="aichip" data-ai="terms" data-id="${ev.id}">解释术语</button>
-      <button class="aichip" data-ai="en" data-id="${ev.id}">译成英文</button></div><div id="ai${ev.id}"></div>`}
+      <button class="aichip" data-ai="sum" data-id="${ev.id}">${tr("一句话摘要")}</button>
+      <button class="aichip" data-ai="counter" data-id="${ev.id}">${tr("反方观点")}</button>
+      <button class="aichip" data-ai="terms" data-id="${ev.id}">${tr("解释术语")}</button>
+      <button class="aichip" data-ai="en" data-id="${ev.id}">${tr("翻译")}</button></div><div id="ai${ev.id}"></div>`}
     ${rpHTML}
     <div class="actions">
-     <button class="act" data-replies="${ev.id}" title="回复">${ICON.reply}${rp ? rp.size : 0}</button>
-     ${ev.kind === 1 ? `<button class="act ${reposted ? "on" : ""}" data-repost="${ev.id}" title="转发">${ICON.repost}${rps ? rps.size : 0}</button>` : ""}
-     <button class="act" data-quote="${ev.id}" title="引用">${ICON.quote}</button>
-     <button class="act like ${liked ? "on" : ""}" data-like="${ev.id}" title="赞">${likeIcon(liked)}${lk ? lk.size : 0}</button>
-     <button class="act bm ${bm ? "on" : ""}" data-bm="${ev.id}" title="${bm ? "取消收藏" : "收藏"}">${bm ? ICON.bmOn : ICON.bm}</button>
-     <button class="act" data-moreopen="${ev.id}" title="更多">${ICON.more}</button>
+     <button class="act" data-replies="${ev.id}" title="${tr("回复")}">${ICON.reply}${rp ? rp.size : 0}</button>
+     ${ev.kind === 1 ? `<button class="act ${reposted ? "on" : ""}" data-repost="${ev.id}" title="${tr("转发")}">${ICON.repost}${rps ? rps.size : 0}</button>` : ""}
+     <button class="act" data-quote="${ev.id}" title="${tr("引用")}">${ICON.quote}</button>
+     <button class="act like ${liked ? "on" : ""}" data-like="${ev.id}" title="${tr("赞")}">${likeIcon(liked)}${lk ? lk.size : 0}</button>
+     <button class="act bm ${bm ? "on" : ""}" data-bm="${ev.id}" title="${bm ? tr("取消收藏") : tr("收藏")}">${bm ? ICON.bmOn : ICON.bm}</button>
+     <button class="act" data-moreopen="${ev.id}" title="${tr("更多")}">${ICON.more}</button>
     </div>
     ${moreHTML}
    </div></article>`;
 }
 function cardHTML(ev) {
   const bg = ["#00BB77", "#0b0d0c", "#FA003F", "#6b726f"][parseInt(ev.id.slice(0, 2), 16) % 4];
-  const head = tag(ev, "title") || ev.content.replace(urlRe, "").replace(refRe, "").trim().split("\n")[0] || "（媒体）";
+  const head = tag(ev, "title") || ev.content.replace(urlRe, "").replace(refRe, "").trim().split("\n")[0] || tr("（媒体）");
   const img = (ev.content.match(urlRe) || []).find((u) => mediaKind(u) === "image");
   const lk = likes.get(ev.id);
   const cover = img ? `<img class="cover-img" loading="lazy" src="${esc(img)}" alt="">` : `<div class="cover" style="background:${bg};min-height:${[150, 210, 180, 240][parseInt(ev.id.slice(2, 4), 16) % 4]}px">${esc(head.length > 34 ? head.slice(0, 34) + "…" : head)}</div>`;
@@ -668,12 +754,12 @@ function visible() {
 }
 function emptyHTML() {
   const npub = pk ? nip19.npubEncode(pk) : "";
-  if (tab === "follow") return `<div class="empty"><h3>关注的人还没发帖</h3><p>在右侧粘贴朋友的 npub 关注对方，或者在「天窗广场」里点帖子上的「关注」。</p></div>`;
-  if (tab === "bookmarks") return `<div class="empty"><h3>还没有收藏</h3><p>点帖子下面的书签按钮收藏。收藏列表加密保存在中继上，只有你自己能看到，换设备也在。</p></div>`;
-  if (tab === "search") return `<div class="empty"><h3>没有找到</h3><p>${esc(searchNote || "换个关键词试试。")}</p></div>`;
-  if (tab === "plaza" && $("#fWot").checked) return `<div class="empty"><h3>关系网里还没有人发帖</h3><p>你打开了「广场只看我的关系网」。多关注几个人，或者在右侧关掉这个过滤器看全部。</p></div>`;
-  return `<div class="empty"><h3>这里还很安静</h3><p>天窗广场只显示用天窗发出的帖子。发第一条，或者把你的账号发给朋友，请对方装好天窗后关注你。</p>
-    <div class="copy-row" style="width:100%"><div class="mono">${esc(npub)}</div><button class="ghost" data-copy="${esc(npub)}">复制我的 npub</button></div></div>`;
+  if (tab === "follow") return `<div class="empty"><h3>${tr("关注的人还没发帖")}</h3><p>${tr("在右侧粘贴朋友的 npub 关注对方，或者在「天窗广场」里点帖子上的「关注」。")}</p></div>`;
+  if (tab === "bookmarks") return `<div class="empty"><h3>${tr("还没有收藏")}</h3><p>${tr("点帖子下面的书签按钮收藏。收藏列表加密保存在中继上，只有你自己能看到，换设备也在。")}</p></div>`;
+  if (tab === "search") return `<div class="empty"><h3>${tr("没有找到")}</h3><p>${esc(searchNote || tr("换个关键词试试。"))}</p></div>`;
+  if (tab === "plaza" && $("#fWot").checked) return `<div class="empty"><h3>${tr("关系网里还没有人发帖")}</h3><p>${tr("你打开了「广场只看我的关系网」。多关注几个人，或者在右侧关掉这个过滤器看全部。")}</p></div>`;
+  return `<div class="empty"><h3>${tr("这里还很安静")}</h3><p>${tr("天窗广场只显示用天窗发出的帖子。发第一条，或者把你的账号发给朋友，请对方装好天窗后关注你。")}</p>
+    <div class="copy-row" style="width:100%"><div class="mono">${esc(npub)}</div><button class="ghost" data-copy="${esc(npub)}">${tr("复制我的 npub")}</button></div></div>`;
 }
 function render() {
   if (!pk || tab === "dm" || tab === "me") return;
@@ -682,18 +768,18 @@ function render() {
   if (tab === "notif") { f.innerHTML = notifHTML(); renderTrend(); return; }
   const list = visible();
   let html = "";
-  if (tab === "search") html += `<div class="search-note">搜索「${esc(searchQ)}」 · ${esc(searchNote)}</div>`;
+  if (tab === "search") html += `<div class="search-note">${tr("搜索「{0}」 · {1}", esc(searchQ), esc(searchNote))}</div>`;
   if (!list.length) html += emptyHTML();
   else if (tab === "discover") html += `<div class="grid">${list.slice(0, pageSize).map(cardHTML).join("")}</div>`;
   else html += list.slice(0, pageSize).map((e) => postHTML(e, tab === "follow" && !follows.has(e.pubkey) && e.pubkey !== pk ? { repostBy: followRepostBy(e.id)?.p } : {})).join("");
-  if (list.length && !["search", "bookmarks"].includes(tab)) html += `<button class="loadmore" id="loadMore">${list.length > pageSize ? "加载更多" : "加载更早的内容"}</button>`;
+  if (list.length && !["search", "bookmarks"].includes(tab)) html += `<button class="loadmore" id="loadMore">${list.length > pageSize ? tr("加载更多") : tr("加载更早的内容")}</button>`;
   f.innerHTML = html;
   renderTrend();
 }
 async function loadMore() {
   const list = visible();
   if (list.length > pageSize) { pageSize += 40; render(); return; }
-  const btn = $("#loadMore"); if (btn) { btn.textContent = "正在加载…"; btn.disabled = true; }
+  const btn = $("#loadMore"); if (btn) { btn.textContent = tr("正在加载…"); btn.disabled = true; }
   const oldest = list.length ? Math.min(...list.map((e) => e.created_at)) : now();
   const filter = tab === "follow" ? { kinds: [1, 6, 30023], authors: [...follows, pk], until: oldest - 1, limit: 100 }
     : tab === "long" ? { kinds: [30023], "#t": [TC_TAG], until: oldest - 1, limit: 60 }
@@ -701,25 +787,25 @@ async function loadMore() {
   const evs = await pool.querySync(relays, filter, { maxWait: 6000 });
   evs.forEach((e) => ingest(e));
   pageSize += 40; render();
-  if (!evs.length) toast("没有更早的内容了");
+  if (!evs.length) toast(tr("没有更早的内容了"));
 }
 function notifHTML() {
   const list = [...notifs.values()].filter((n) => !mutes.has(n.from)).sort((a, b) => b.at - a.at).slice(0, 200);
-  const head = `<div class="feed-head"><h2>通知</h2><span class="foot">回复、提到、转发、点赞和新关注</span></div>`;
-  if (!list.length) return head + `<div class="empty"><p>还没有通知。有人回复、提到、转发、点赞或关注你，都会出现在这里。</p></div>`;
-  const verb = { like: "赞了你的帖子", reply: "回复了你", mention: "提到了你", quote: "引用了你的帖子", repost: "转发了你的帖子", follow: "关注了你" };
+  const head = `<div class="feed-head"><h2>${tr("通知")}</h2><span class="foot">${tr("回复、提到、转发、点赞和新关注")}</span></div>`;
+  if (!list.length) return head + `<div class="empty"><p>${tr("还没有通知。有人回复、提到、转发、点赞或关注你，都会出现在这里。")}</p></div>`;
+  // 动词模板在全局 NOTIF_VERB 里
   return head + list.map((n) => {
     const ref = n.ref ? events.get(n.ref) : null;
     const snip = n.type === "reply" || n.type === "mention" || n.type === "quote" ? n.text : ref ? (tag(ref, "title") || ref.content) : "";
     const target = n.type === "follow" ? `data-user="${n.from}"` : `data-post="${n.type === "reply" ? n.ref : n.ref || ""}"`;
-    return `<div class="notif ${n.at > notifSeen ? "unread" : ""}" ${target}>${avatarHTML(n.from)}<div style="min-width:0"><div class="line"><b>${esc(nameOf(n.from))}</b> ${verb[n.type]} <span class="time">· ${ago(n.at)}</span></div>${snip ? `<div class="snip">${esc(String(snip).replace(refRe, "").replace(urlRe, "〔链接〕").slice(0, 120))}</div>` : ""}</div></div>`;
+    return `<div class="notif ${n.at > notifSeen ? "unread" : ""}" ${target}>${avatarHTML(n.from)}<div style="min-width:0"><div class="line">${tr(NOTIF_VERB[n.type], `<b>${esc(nameOf(n.from))}</b>`)} <span class="time">· ${ago(n.at)}</span></div>${snip ? `<div class="snip">${esc(String(snip).replace(refRe, "").replace(urlRe, tr("〔链接〕")).slice(0, 120))}</div>` : ""}</div></div>`;
   }).join("");
 }
 function renderTrend() {
   const c = new Map();
   for (const e of posts.values()) if (e.created_at > now() - 14 * 86400) for (const t of e.tags) if (t[0] === "t" && t[1] !== TC_TAG) c.set(t[1], (c.get(t[1]) || 0) + 1);
   const top = [...c.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-  $("#trend").innerHTML = top.length ? top.map(([t, n]) => `<button data-hashtag="${esc(t)}"><b>#${esc(t)}</b>${n} 篇</button>`).join("") : `<div>帖子里带 #话题 后会出现在这里。</div>`;
+  $("#trend").innerHTML = top.length ? top.map(([t, n]) => `<button data-hashtag="${esc(t)}"><b>#${esc(t)}</b>${tr("{0} 篇", n)}</button>`).join("") : `<div>${tr("帖子里带 #话题 后会出现在这里。")}</div>`;
 }
 function renderMe() {
   if (!pk) return;
@@ -748,19 +834,19 @@ function renderPanel() {
   const box = $("#panelBody");
   if (panelMode.type === "post") {
     const ev = events.get(panelMode.id);
-    box.innerHTML = ev ? postHTML(ev) : `<div class="empty"><p>正在从中继加载这条内容…</p></div>`; return;
+    box.innerHTML = ev ? postHTML(ev) : `<div class="empty"><p>${tr("正在从中继加载这条内容…")}</p></div>`; return;
   }
   const p = panelMode.p, pr = profiles.get(p) || {}, me = p === pk;
   const list = [...events.values()].filter((e) => e.pubkey === p && posts.has(e.id)).sort((a, b) => sortTime(b) - sortTime(a)).slice(0, 40);
   const npub = nip19.npubEncode(p);
   box.innerHTML = `<div class="u-head">${avatarHTML(p)}<h2>${esc(nameOf(p))}</h2>
     ${pr.headline ? `<div class="headline">${esc(pr.headline)}</div>` : ""}${pr.about ? `<div class="about">${esc(pr.about)}</div>` : ""}
-    <div class="copy-row"><div class="mono">${esc(npub)}</div><button class="ghost" data-copy="${esc(npub)}">复制</button></div>
-    <div class="u-actions">${me ? `<button class="ghost" id="uEdit">编辑资料</button>` : `
-      <button class="solid" data-follow="${p}">${follows.has(p) ? "取消关注" : "关注"}</button>
-      <button class="ghost" data-dmto="${p}">加密私信</button>
-      <button class="ghost" data-mute="${p}">${mutes.has(p) ? "取消屏蔽" : "屏蔽"}</button>`}</div></div>` +
-    (mutes.has(p) ? `<div class="empty"><p>你屏蔽了这个人，他的内容不会出现在你的信息流里。</p></div>` : list.length ? list.map((e) => postHTML(e)).join("") : `<div class="empty"><p>还没有加载到这个人的帖子。</p></div>`);
+    <div class="copy-row"><div class="mono">${esc(npub)}</div><button class="ghost" data-copy="${esc(npub)}">${tr("复制")}</button></div>
+    <div class="u-actions">${me ? `<button class="ghost" id="uEdit">${tr("编辑资料")}</button>` : `
+      <button class="solid" data-follow="${p}">${follows.has(p) ? tr("取消关注") : tr("关注")}</button>
+      <button class="ghost" data-dmto="${p}">${tr("加密私信")}</button>
+      <button class="ghost" data-mute="${p}">${mutes.has(p) ? tr("取消屏蔽") : tr("屏蔽")}</button>`}</div></div>` +
+    (mutes.has(p) ? `<div class="empty"><p>${tr("你屏蔽了这个人，他的内容不会出现在你的信息流里。")}</p></div>` : list.length ? list.map((e) => postHTML(e)).join("") : `<div class="empty"><p>${tr("还没有加载到这个人的帖子。")}</p></div>`);
   $("#uEdit") && ($("#uEdit").onclick = () => { $("#panel").hidden = true; openProfile(false); });
 }
 $("#panelClose").onclick = () => { $("#panel").hidden = true; panelMode = null; };
@@ -795,15 +881,15 @@ async function globalSearch(q) {
   q = q.trim(); if (!q || !pool) return;
   searchQ = q; searchHits.clear();
   for (const e of events.values()) if (posts.has(e.id) && matchQ(e, q)) searchHits.add(e.id);
-  $("#tabSearch").hidden = false; $("#tabSearch").textContent = "搜索：" + (q.length > 8 ? q.slice(0, 8) + "…" : q);
-  searchNote = `本地 ${searchHits.size} 条，正在搜索全网…`; setTab("search");
+  $("#tabSearch").hidden = false; $("#tabSearch").textContent = tr("搜索：{0}", q.length > 8 ? q.slice(0, 8) + "…" : q);
+  searchNote = tr("本地 {0} 条，正在搜索全网…", searchHits.size); setTab("search");
   const sp = new SimplePool(); let got = 0;
   try {
     const evs = await sp.querySync(searchRelays, { search: q, kinds: [1, 30023], limit: 60 }, { maxWait: 7000 });
     for (const e of evs) { ingest(e); if (events.has(e.id)) { searchHits.add(e.id); got++; } }
   } catch (e) {}
   try { sp.destroy(); } catch (e) {}
-  searchNote = got ? `全网返回 ${got} 条，共 ${searchHits.size} 条` : `全网搜索没有返回结果，或搜索中继连不上。下面是本地的 ${searchHits.size} 条。`;
+  searchNote = got ? tr("全网返回 {0} 条，共 {1} 条", got, searchHits.size) : tr("全网搜索没有返回结果，或搜索中继连不上。下面是本地的 {0} 条。", searchHits.size);
   if (tab === "search") render();
 }
 $("#q").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); globalSearch($("#q").value); } });
@@ -813,24 +899,24 @@ $("#q2").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComp
 function syncSend() { $("#send").disabled = !($("#body").value.trim() || media || quoteRef); }
 $("#body").oninput = () => { syncSend(); ls.set("tc-draft", $("#body").value); mentionCheck(); };
 $("#body").value = ls.get("tc-draft", ""); syncSend();
-$$("#modes button").forEach((b) => (b.onclick = () => { mode = b.dataset.mode; $$("#modes button").forEach((x) => x.classList.toggle("on", x === b)); $("#title").hidden = mode !== "article"; $("#body").placeholder = mode === "article" ? "正文。支持长篇论证，读者可一键 AI 摘要。" : "打开天窗说亮话。观点不需要被审批。输入 @ 可以提到别人。"; }));
+$$("#modes button").forEach((b) => (b.onclick = () => { mode = b.dataset.mode; $$("#modes button").forEach((x) => x.classList.toggle("on", x === b)); $("#title").hidden = mode !== "article"; $("#body").placeholder = mode === "article" ? tr("正文。支持长篇论证，读者可一键 AI 摘要。") : tr("打开天窗说亮话。观点不需要被审批。输入 @ 可以提到别人。"); }));
 $("#pickMedia").onclick = () => $("#fMedia").click();
 $("#fMedia").onchange = async (e) => {
   let f = e.target.files[0]; e.target.value = ""; if (!f || !sk) return;
-  if (f.size > 100 * 1024 * 1024) return toast("文件超过 100MB");
-  $("#upState").hidden = false; $("#upState").textContent = "正在处理…"; media = null; syncSend();
+  if (f.size > 100 * 1024 * 1024) return toast(tr("文件超过 100MB"));
+  $("#upState").hidden = false; $("#upState").textContent = tr("正在处理…"); media = null; syncSend();
   f = await compressImage(f);
   const local = URL.createObjectURL(f), k = f.type.split("/")[0];
   $("#mediaPrev").innerHTML = k === "video" ? `<video controls playsinline src="${local}"></video>` : k === "audio" ? `<audio controls src="${local}"></audio>` : `<img src="${local}" alt="">`;
-  $("#upState").textContent = "正在上传到媒体服务器…（公开帖子里的媒体不加密，任何人都能看到）";
-  try { const { url } = await uploadBlossom(f); media = { url }; $("#upState").textContent = "已上传 · " + url.replace(/^https:\/\//, "").slice(0, 48); }
-  catch (err) { $("#upState").textContent = "上传失败：" + err.message; $("#mediaPrev").innerHTML = ""; }
+  $("#upState").textContent = tr("正在上传到媒体服务器…（公开帖子里的媒体不加密，任何人都能看到）");
+  try { const { url } = await uploadBlossom(f); media = { url }; $("#upState").textContent = tr("已上传 · ") + url.replace(/^https:\/\//, "").slice(0, 48); }
+  catch (err) { $("#upState").textContent = tr("上传失败：") + err.message; $("#mediaPrev").innerHTML = ""; }
   syncSend();
 };
 function setQuote(ev) {
   quoteRef = ev;
   if (!ev) { $("#quoteBox").hidden = true; $("#quoteBox").innerHTML = ""; syncSend(); return; }
-  $("#quoteBox").innerHTML = quoteHTML(ev.id) + `<button class="x" type="button" data-unquote="1" title="取消引用">×</button>`;
+  $("#quoteBox").innerHTML = quoteHTML(ev.id) + `<button class="x" type="button" data-unquote="1" title="${tr("取消引用")}">×</button>`;
   $("#quoteBox").hidden = false; syncSend();
 }
 /* @提及自动补全 */
@@ -853,7 +939,7 @@ function insertMention(p) {
 }
 $("#send").onclick = async () => {
   let text = $("#body").value.trim(); const title = $("#title").value.trim();
-  if (mode === "article" && !title) return toast("长文需要标题");
+  if (mode === "article" && !title) return toast(tr("长文需要标题"));
   const hashtags = [...new Set((text.match(/#([^\s#，。,.!?！？]+)/g) || []).map((t) => t.slice(1)))].slice(0, 10);
   const ptags = [];
   for (const [name, p] of mentionMap) if (text.includes("@" + name)) { text = text.split("@" + name).join("nostr:" + nip19.npubEncode(p)); ptags.push(["p", p]); }
@@ -870,9 +956,9 @@ $("#send").onclick = async () => {
   let res;
   if (mode === "article") res = await publish({ kind: 30023, created_at: now(), content, tags: [["d", toHex(crypto.getRandomValues(new Uint8Array(8)))], ["title", title], ["published_at", String(now())], ...tags] });
   else res = await publish({ kind: 1, created_at: now(), content: content.trim(), tags });
-  if (!res.ok) { toast("没有中继接收这条帖子，检查一下网络"); syncSend(); return; }
+  if (!res.ok) { toast(tr("没有中继接收这条帖子，检查一下网络")); syncSend(); return; }
   $("#body").value = ""; $("#title").value = ""; $("#mediaPrev").innerHTML = ""; $("#upState").hidden = true; media = null; $("#composeAI").hidden = true; ls.del("tc-draft"); mentionMap.clear(); setQuote(null); syncSend();
-  toast(`已签名并写入 ${res.ok}/${relays.length} 个中继`);
+  toast(tr("已签名并写入 {0}/{1} 个中继", res.ok, relays.length));
 };
 
 /* ======================= 点击操作（统一处理） ======================= */
@@ -886,9 +972,9 @@ document.addEventListener("click", async (e) => {
     await publish({ kind: 7, created_at: now(), content: "+", tags: [["e", ev.id], ["p", ev.pubkey], ["k", String(ev.kind)]] });
   } else if (d.repost) {
     const ev = events.get(d.repost); if (!ev) return;
-    if (reposts.get(ev.id)?.has(pk)) return toast("你已经转发过了");
+    if (reposts.get(ev.id)?.has(pk)) return toast(tr("你已经转发过了"));
     const { ok } = await publish({ kind: 6, created_at: now(), content: JSON.stringify(ev), tags: [["e", ev.id, relays[0] || ""], ["p", ev.pubkey]] });
-    toast(ok ? "已转发" : "转发失败");
+    toast(ok ? tr("已转发") : tr("转发失败"));
   } else if (d.quote) {
     const ev = events.get(d.quote); if (!ev) return;
     $("#panel").hidden = true; setTab("plaza"); setQuote(ev); setTimeout(() => $("#body").focus(), 60);
@@ -896,20 +982,20 @@ document.addEventListener("click", async (e) => {
     const id = d.bm, on = !bookmarks.has(id);
     on ? bookmarks.add(id) : bookmarks.delete(id); schedule();
     const { ok } = await writeList(10003, "e", bookmarks, bmEv);
-    toast(ok ? (on ? "已收藏（加密保存，只有你能看到）" : "已取消收藏") : "保存失败，检查一下网络");
+    toast(ok ? (on ? tr("已收藏（加密保存，只有你能看到）") : tr("已取消收藏")) : tr("保存失败，检查一下网络"));
   } else if (d.moreopen) { openMore.has(d.moreopen) ? openMore.delete(d.moreopen) : openMore.add(d.moreopen); render(); renderPanel(); }
   else if (d.del) {
-    if (t.dataset.confirm !== "1") { t.dataset.confirm = "1"; t.textContent = "确认删除？再点一次"; return; }
+    if (t.dataset.confirm !== "1") { t.dataset.confirm = "1"; t.textContent = tr("确认删除？再点一次"); return; }
     const ev = events.get(d.del); if (!ev) return;
     const tags = [["e", ev.id], ["k", String(ev.kind)]]; if (ev.kind === 30023) tags.push(["a", `30023:${ev.pubkey}:${tag(ev, "d") || ""}`]);
-    const { ok } = await publish({ kind: 5, created_at: now(), content: "作者删除", tags });
+    const { ok } = await publish({ kind: 5, created_at: now(), content: "", tags });
     removeEvent(ev.id); schedule();
-    toast(ok ? "已删除。已请求所有中继删除，但无法保证每个中继都照做。" : "删除请求发送失败");
+    toast(ok ? tr("已删除。已请求所有中继删除，但无法保证每个中继都照做。") : tr("删除请求发送失败"));
   } else if (d.mute) {
     const p = d.mute, on = !mutes.has(p);
     on ? mutes.add(p) : mutes.delete(p); renderMuteList(); schedule();
     const { ok } = await writeList(10000, "p", mutes, muteEv);
-    toast(ok ? (on ? `已屏蔽 ${nameOf(p)}，屏蔽名单加密保存` : `已取消屏蔽 ${nameOf(p)}`) : "保存失败，检查一下网络");
+    toast(ok ? (on ? tr("已屏蔽 {0}，屏蔽名单加密保存", nameOf(p)) : tr("已取消屏蔽 {0}", nameOf(p))) : tr("保存失败，检查一下网络"));
   } else if (d.replies) { openReplies.has(d.replies) ? openReplies.delete(d.replies) : openReplies.add(d.replies); render(); renderPanel(); setTimeout(() => $("#rp-" + d.replies)?.focus(), 30); }
   else if (d.follow) { const on = !follows.has(d.follow); t.disabled = true; await setFollow(d.follow, on); }
   else if (d.dmto) { $("#panel").hidden = true; openConv(d.dmto, [d.dmto]); setTab("dm"); }
@@ -922,7 +1008,7 @@ document.addEventListener("click", async (e) => {
   else if (d.unquote) setQuote(null);
   else if (d.ai && d.id) postAI(d.ai, d.id);
   else if (t.classList.contains("ai")) composeAI(d.ai);
-  else if (d.unmute) { mutes.delete(d.unmute); renderMuteList(); schedule(); await writeList(10000, "p", mutes, muteEv); toast("已取消屏蔽"); }
+  else if (d.unmute) { mutes.delete(d.unmute); renderMuteList(); schedule(); await writeList(10000, "p", mutes, muteEv); toast(tr("已取消屏蔽")); }
   else if (d.decrypt) { const [key, id] = d.decrypt.split("|"); const m = convs.get(key)?.msgs.get(id); if (m) loadFile(m, true); }
   else if (d.user && !t.closest(".mention-box,#convs,#meCard,#thAv,#meAv2,#compAv,#pfAv")) openUser(d.user);
   else if (d.post && t.tagName !== "BUTTON") openPost(d.post);
@@ -935,16 +1021,16 @@ document.addEventListener("submit", async (e) => {
   const tags = [["e", root.id, relays[0] || "", "root"], ["p", root.pubkey], ["client", "天窗"]];
   if (root.kind === 30023) tags.push(["a", `30023:${root.pubkey}:${tag(root, "d") || ""}`]);
   const { ok } = await publish({ kind: 1, created_at: now(), content: text, tags });
-  toast(ok ? "回复已发布" : "回复发布失败");
+  toast(ok ? tr("回复已发布") : tr("回复发布失败"));
 });
 $("#followForm").onsubmit = async (e) => {
   e.preventDefault();
-  try { const p = decodeNpub($("#followIn").value); if (p === pk) return toast("这是你自己"); $("#followIn").value = ""; needProfile(p); await setFollow(p, true); }
-  catch (err) { toast("没认出这个 npub"); }
+  try { const p = decodeNpub($("#followIn").value); if (p === pk) return toast(tr("这是你自己")); $("#followIn").value = ""; needProfile(p); await setFollow(p, true); }
+  catch (err) { toast(tr("没认出这个 npub")); }
 };
 function renderMuteList() {
   const box = $("#muteList"); if (!box) return;
-  box.innerHTML = mutes.size ? [...mutes].map((p) => `<div><span>${esc(nameOf(p))} <span class="key">${short(p)}</span></span><button data-unmute="${p}">取消屏蔽</button></div>`).join("") : `<p class="hint">没有屏蔽任何人。在帖子的「更多」里可以屏蔽。名单加密保存在中继上，只有你能看到。</p>`;
+  box.innerHTML = mutes.size ? [...mutes].map((p) => `<div><span>${esc(nameOf(p))} <span class="key">${short(p)}</span></span><button data-unmute="${p}">${tr("取消屏蔽")}</button></div>`).join("") : `<p class="hint">${tr("没有屏蔽任何人。在帖子的「更多」里可以屏蔽。名单加密保存在中继上，只有你能看到。")}</p>`;
 }
 
 /* ======================= 加密私信与群聊（NIP-17） ======================= */
@@ -981,14 +1067,14 @@ function onGiftWrap(wrap, fromCache) {
   const msg = { id: r.id, me: r.pubkey === pk, from: r.pubkey, at: r.created_at, wire: wrap.content, exp, status: "" };
   if (r.kind === 14) msg.text = String(r.content).slice(0, 20000);
   else {
-    msg.file = { url: String(r.content), mime: String(tag(r, "file-type") || "application/octet-stream"), key: tag(r, "decryption-key"), nonce: tag(r, "decryption-nonce"), alg: tag(r, "encryption-algorithm"), name: String(tag(r, "name") || "附件").slice(0, 80), size: Number(tag(r, "size")) || 0 };
-    msg.text = msg.file.mime.startsWith("image/") ? "〔图片〕" : msg.file.mime.startsWith("video/") ? "〔视频〕" : "〔文件〕";
+    msg.file = { url: String(r.content), mime: String(tag(r, "file-type") || "application/octet-stream"), key: tag(r, "decryption-key"), nonce: tag(r, "decryption-nonce"), alg: tag(r, "encryption-algorithm"), name: String(tag(r, "name") || tr("附件")).slice(0, 80), size: Number(tag(r, "size")) || 0 };
+    msg.text = "";
   }
   if (!fromCache && !booting && mutes.has(r.pubkey)) return;
   addMsg(key, members, msg, tag(r, "subject"));
   if (!msg.me && !fromCache && !booting && r.created_at > now() - 300 && !(tab === "dm" && curConv === key && !document.hidden)) {
-    toast(`${nameOf(r.pubkey)} 发来一条加密私信`);
-    nativeNotify("天窗", `${nameOf(r.pubkey)} 发来一条加密私信`);    // 系统通知里不显示私信内容
+    toast(tr("{0} 发来一条加密私信", nameOf(r.pubkey)));
+    nativeNotify(APP(), tr("{0} 发来一条加密私信", nameOf(r.pubkey)));    // 系统通知里不显示私信内容
   }
 }
 function ensureConv(key, members) {
@@ -1002,7 +1088,7 @@ function addMsg(key, members, m, subject) {
   if (old) { if (!old.wire && m.wire) old.wire = m.wire; } else c.msgs.set(m.id, m);
   c.last = Math.max(c.last, m.at); members.forEach(needProfile); schedule();
 }
-const convTitle = (c) => (c.group ? c.name || c.members.map(nameOf).slice(0, 3).join("、") + (c.members.length > 3 ? " 等" : "") : nameOf(c.members[0]));
+const convTitle = (c) => (c.group ? c.name || c.members.map(nameOf).slice(0, 3).join(tr("、")) + (c.members.length > 3 ? tr(" 等") : "") : nameOf(c.members[0]));
 const convAvatar = (c) => (c.group ? `<span class="avatar" style="background:#0b0d0c">${esc(ini(convTitle(c)))}</span>` : avatarHTML(c.members[0]));
 const dmRelayCache = new Map();
 async function dmRelaysOf(p) {
@@ -1017,7 +1103,7 @@ async function sendRumor(c, kind, content, extraTags = [], local = {}) {
   if (c.group && c.name) tags.push(["subject", c.name]);
   const rumor = { kind, created_at: now(), tags, content, pubkey: pk };
   rumor.id = getEventHash(rumor);
-  const msg = { id: rumor.id, me: true, from: pk, at: rumor.created_at, exp: exp ? now() + exp : 0, status: "发送中", ...local };
+  const msg = { id: rumor.id, me: true, from: pk, at: rumor.created_at, exp: exp ? now() + exp : 0, status: tr("发送中"), ...local };
   addMsg(c.key, c.members, msg);
   let ok = 0;
   await Promise.all(c.members.filter((p) => p !== pk).map(async (p) => {
@@ -1030,7 +1116,7 @@ async function sendRumor(c, kind, content, extraTags = [], local = {}) {
   const self = giftWrap(rumor, pk, exp); seenWraps.add(self.id); cache.put(self);
   Promise.allSettled(pool.publish(relays, self));
   const n = c.members.filter((p) => p !== pk).length;
-  msg.status = !n ? "已保存" : ok === n ? "已送达" : ok ? `已送达 ${ok}/${n} 人` : "发送失败";
+  msg.status = !n ? tr("已保存") : ok === n ? tr("已送达") : ok ? tr("已送达 {0}/{1} 人", ok, n) : tr("发送失败");
   schedule();
 }
 function openConv(key, members) {
@@ -1040,49 +1126,49 @@ function openConv(key, members) {
 }
 $("#newChat").onsubmit = (e) => {
   e.preventDefault();
-  try { const p = decodeNpub($("#newChatIn").value); if (p === pk) return toast("不能给自己发私信"); $("#newChatIn").value = ""; openConv(p, [p]); renderConvs(); renderThread(); $("#dmIn").focus(); }
-  catch (err) { toast("没认出这个 npub"); }
+  try { const p = decodeNpub($("#newChatIn").value); if (p === pk) return toast(tr("不能给自己发私信")); $("#newChatIn").value = ""; openConv(p, [p]); renderConvs(); renderThread(); $("#dmIn").focus(); }
+  catch (err) { toast(tr("没认出这个 npub")); }
 };
 $("#ngToggle").onclick = () => { $("#newGroup").hidden = !$("#newGroup").hidden; if (!$("#newGroup").hidden) $("#ngName").focus(); };
 $("#newGroup").onsubmit = (e) => {
   e.preventDefault();
   const raw = $("#ngMembers").value.split(/[\s,，]+/).filter(Boolean), members = new Set();
-  for (const s of raw) { try { const p = decodeNpub(s); if (p !== pk) members.add(p); } catch (err) { return toast("有一个 npub 没认出来：" + s.slice(0, 16)); } }
-  if (members.size < 2) return toast("群聊至少需要 2 位其他成员；只有一位就用「新对话」");
-  if (members.size > 20) return toast("群聊最多 20 人");
+  for (const s of raw) { try { const p = decodeNpub(s); if (p !== pk) members.add(p); } catch (err) { return toast(tr("有一个 npub 没认出来：") + s.slice(0, 16)); } }
+  if (members.size < 2) return toast(tr("群聊至少需要 2 位其他成员；只有一位就用「新对话」"));
+  if (members.size > 20) return toast(tr("群聊最多 20 人"));
   const list = [...members].sort(), key = convKeyOf(list);
   const c = openConv(key, list); c.name = $("#ngName").value.trim().slice(0, 40); c.nameAt = now();
   $("#ngMembers").value = ""; $("#ngName").value = ""; $("#newGroup").hidden = true;
   renderConvs(); renderThread(); $("#dmIn").focus();
-  toast("群聊已创建。发出第一条消息后，成员才会看到这个群。");
+  toast(tr("群聊已创建。发出第一条消息后，成员才会看到这个群。"));
 };
 $("#convs").onclick = (e) => { const b = e.target.closest("[data-conv]"); if (!b) return; const c = convs.get(b.dataset.conv); if (!c) return; openConv(c.key, c.members); renderConvs(); renderThread(); };
 $("#dmBack").onclick = () => $("#dm").classList.remove("open");
-$("#wire").onclick = () => { showWire = !showWire; $("#wire").classList.toggle("on", showWire); $("#wire").textContent = showWire ? "隐藏密文" : "显示密文"; renderThread(); };
+$("#wire").onclick = () => { showWire = !showWire; $("#wire").classList.toggle("on", showWire); $("#wire").textContent = showWire ? tr("隐藏密文") : tr("显示密文"); renderThread(); };
 $("#safeBtn").onclick = () => { $("#safety").hidden = !$("#safety").hidden; $("#safeBtn").classList.toggle("on", !$("#safety").hidden); };
 $("#verifyBtn").onclick = () => { const c = convs.get(curConv); if (!c || c.group) return; const p = c.members[0]; verified.has(p) ? verified.delete(p) : verified.add(p); ls.set("tc-verified", JSON.stringify([...verified])); renderThread(); };
 $("#dmForm").onsubmit = async (e) => {
   e.preventDefault(); const text = $("#dmIn").value.trim(); const c = convs.get(curConv); if (!text || !c) return;
   $("#dmIn").value = ""; await sendRumor(c, 14, text, [], { text });
 };
-$("#dmAttach").onclick = () => { if (!convs.get(curConv)) return toast("先选择一个对话"); $("#dmFile").click(); };
+$("#dmAttach").onclick = () => { if (!convs.get(curConv)) return toast(tr("先选择一个对话")); $("#dmFile").click(); };
 $("#dmFile").onchange = async (e) => {
   let f = e.target.files[0]; e.target.value = ""; const c = convs.get(curConv); if (!f || !c) return;
-  if (f.size > 50 * 1024 * 1024) return toast("加密附件最大 50MB");
-  toast("正在加密并上传…");
+  if (f.size > 50 * 1024 * 1024) return toast(tr("加密附件最大 50MB"));
+  toast(tr("正在加密并上传…"));
   try {
     f = await compressImage(f);
     const enc = await encryptFile(f);
     const { url, hash } = await uploadBlossom(enc.blob, "application/octet-stream");
-    const mime = f.type || "application/octet-stream", name = (f.name || "附件").slice(0, 80);
+    const mime = f.type || "application/octet-stream", name = (f.name || tr("附件")).slice(0, 80);
     const local = URL.createObjectURL(f);
     const tags = [["file-type", mime], ["encryption-algorithm", "aes-gcm"], ["decryption-key", enc.key], ["decryption-nonce", enc.nonce], ["x", hash], ["size", String(enc.blob.size)], ["name", name]];
     const file = { url, mime, key: enc.key, nonce: enc.nonce, alg: "aes-gcm", name, size: enc.blob.size };
-    const rumorText = mime.startsWith("image/") ? "〔图片〕" : mime.startsWith("video/") ? "〔视频〕" : "〔文件〕";
+    const rumorText = "";
     await sendRumor(c, 15, url, tags, { file, text: rumorText, _local: local });
     const m = [...c.msgs.values()].find((x) => x._local === local); if (m) blobCache.set(m.id, local);
     schedule();
-  } catch (err) { toast("附件发送失败：" + (err.message || "网络问题")); }
+  } catch (err) { toast(tr("附件发送失败：") + (err.message || tr("网络问题"))); }
 };
 async function loadFile(m, manual) {
   const f = m.file; if (!f || loadingFiles.has(m.id) || blobCache.has(m.id)) return;
@@ -1095,14 +1181,14 @@ async function loadFile(m, manual) {
 function fileHTML(c, m) {
   const f = m.file, u = blobCache.get(m.id);
   if (u === undefined) {
-    if (f.size > 25 * 1024 * 1024) return `<div class="file"><button class="filebtn" data-decrypt="${esc(c.key)}|${m.id}">解密并下载 ${esc(f.name)}（${(f.size / 1048576).toFixed(1)} MB）</button></div>`;
-    loadFile(m); return `<div class="file">正在下载并解密附件…</div>`;
+    if (f.size > 25 * 1024 * 1024) return `<div class="file"><button class="filebtn" data-decrypt="${esc(c.key)}|${m.id}">${tr("解密并下载 {0}（{1} MB）", esc(f.name), (f.size / 1048576).toFixed(1))}</button></div>`;
+    loadFile(m); return `<div class="file">${tr("正在下载并解密附件…")}</div>`;
   }
-  if (u === null) return `<div class="file">附件无法解密，或已在服务器上过期。</div>`;
+  if (u === null) return `<div class="file">${tr("附件无法解密，或已在服务器上过期。")}</div>`;
   if (f.mime.startsWith("image/")) return `<div class="file"><img src="${u}" alt=""></div>`;
   if (f.mime.startsWith("video/")) return `<div class="file"><video controls playsinline src="${u}"></video></div>`;
   if (f.mime.startsWith("audio/")) return `<div class="file"><audio controls src="${u}"></audio></div>`;
-  return `<div class="file"><a href="${u}" download="${esc(f.name)}">下载 ${esc(f.name)}</a></div>`;
+  return `<div class="file"><a href="${u}" download="${esc(f.name)}">${tr("下载 {0}", esc(f.name))}</a></div>`;
 }
 setInterval(() => { if (tab === "dm") renderThread(); }, 30000);
 
@@ -1116,9 +1202,9 @@ function renderConvs() {
   const list = [...convs.values()].filter((c) => c.group || !mutes.has(c.members[0])).sort((a, b) => b.last - a.last);
   $("#convs").innerHTML = list.map((c) => {
     const last = [...c.msgs.values()].sort((a, b) => b.at - a.at)[0], un = convUnread(c);
-    const who = last ? (last.me ? "你：" : c.group ? nameOf(last.from) + "：" : "") : "";
+    const who = last ? (last.me ? tr("你：") : c.group ? nameOf(last.from) + tr("：") : "") : "";
     return `<button class="conv ${c.key === curConv ? "on" : ""}" data-conv="${esc(c.key)}">${convAvatar(c)}
-      <div><b>${esc(convTitle(c))}${c.group ? ` <span class="key">· ${c.members.length + 1} 人</span>` : ""}</b><small>${last ? esc(who + last.text) : "尚无消息"}</small></div>${un ? `<i class="badge-n unread">${un}</i>` : ""}</button>`;
+      <div><b>${esc(convTitle(c))}${c.group ? ` <span class="key">· ${tr("{0} 人", c.members.length + 1)}</span>` : ""}</b><small>${last ? esc(who + (last.file ? fileLabel(last.file) : last.text)) : tr("尚无消息")}</small></div>${un ? `<i class="badge-n unread">${un}</i>` : ""}</button>`;
   }).join("");
 }
 async function renderThread() {
@@ -1126,17 +1212,17 @@ async function renderThread() {
   if (!c) return;
   $("#thAv").innerHTML = convAvatar(c); $("#thName").textContent = convTitle(c);
   $("#safeBtn").hidden = c.group;
-  if (c.group) { $("#thSub").className = "badge-u"; $("#thSub").textContent = `${c.members.length + 1} 人加密群聊`; $("#safety").hidden = true; }
+  if (c.group) { $("#thSub").className = "badge-u"; $("#thSub").textContent = tr("{0} 人加密群聊", c.members.length + 1); $("#safety").hidden = true; }
   else {
     const p = c.members[0], v = verified.has(p);
-    $("#thSub").className = v ? "badge-v" : "badge-u"; $("#thSub").textContent = v ? "✓ 安全码已验证" : short(p) + " · 未验证";
-    $("#verifyBtn").textContent = v ? "已验证 ✓" : "标记为已验证"; $("#verifyBtn").classList.toggle("done", v);
+    $("#thSub").className = v ? "badge-v" : "badge-u"; $("#thSub").textContent = v ? tr("✓ 安全码已验证") : tr("{0} · 未验证", short(p));
+    $("#verifyBtn").textContent = v ? tr("已验证 ✓") : tr("标记为已验证"); $("#verifyBtn").classList.toggle("done", v);
   }
   const t = now();
   const msgs = [...c.msgs.values()].filter((m) => !m.exp || m.exp > t).sort((a, b) => a.at - b.at).slice(-300);
   const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
-  box.innerHTML = `<div class="sys">${c.group ? "群消息逐个加密发给每位成员。" : ""}消息经 NIP-17 加密：中继只能看到一个随机临时身份发来的乱码，看不到内容，也看不到是谁发的。</div>` +
-    msgs.map((m) => `<div class="bub ${m.me ? "mine" : "them"}">${c.group && !m.me ? `<div class="from">${esc(nameOf(m.from))}</div>` : ""}${m.file ? fileHTML(c, m) : esc(m.text)}${showWire && m.wire ? `<div class="ct">${esc(m.wire.slice(0, 220))}…</div>` : ""}<div class="m">${m.exp ? "⏱ " : ""}${ICON.lock}${new Date(m.at * 1000).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}${m.me && m.status ? ` · <span class="status">${esc(m.status)}</span>` : ""}</div></div>`).join("");
+  box.innerHTML = `<div class="sys">${c.group ? tr("群消息逐个加密发给每位成员。") : ""}${tr("消息经 NIP-17 加密：中继只能看到一个随机临时身份发来的乱码，看不到内容，也看不到是谁发的。")}</div>` +
+    msgs.map((m) => `<div class="bub ${m.me ? "mine" : "them"}">${c.group && !m.me ? `<div class="from">${esc(nameOf(m.from))}</div>` : ""}${m.file ? fileHTML(c, m) : esc(m.text)}${showWire && m.wire ? `<div class="ct">${esc(m.wire.slice(0, 220))}…</div>` : ""}<div class="m">${m.exp ? "⏱ " : ""}${ICON.lock}${new Date(m.at * 1000).toLocaleString(LOCALE(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}${m.me && m.status ? ` · <span class="status">${esc(m.status)}</span>` : ""}</div></div>`).join("");
   if (atBottom) box.scrollTop = box.scrollHeight;
   if (tab === "dm" && !document.hidden) {
     const latest = msgs.length ? msgs[msgs.length - 1].at : 0;
@@ -1153,8 +1239,8 @@ function openProfile(first) {
   $("#pfNpub").textContent = nip19.npubEncode(pk);
   $("#pfAv").innerHTML = avatarHTML(pk); $("#pfPicState").textContent = "";
   $("#pfName").value = pr.name || ""; $("#pfHead").value = pr.headline || ""; $("#pfAbout").value = pr.about || "";
-  $("#pfNsec").textContent = "••••••••••••••••••••••••••••••••"; $("#showNsec").textContent = "显示";
-  $("#pfTitle").textContent = first ? "身份已创建 · 请先备份私钥" : "个人档案";
+  $("#pfNsec").textContent = "••••••••••••••••••••••••••••••••"; $("#showNsec").textContent = tr("显示");
+  $("#pfTitle").textContent = first ? tr("身份已创建 · 请先备份私钥") : tr("个人档案");
   $("#profile").hidden = false;
 }
 $("#openProfile").onclick = (e) => { e.preventDefault(); if (pk) openProfile(false); };
@@ -1162,18 +1248,18 @@ $("#meCard").onclick = (e) => { e.stopPropagation(); if (pk) openProfile(false);
 $("#mProfile").onclick = () => pk && openProfile(false);
 $("#mSettings").onclick = () => $("#openSettings").click();
 $("#copyNpub").onclick = () => copy(nip19.npubEncode(pk));
-$("#showNsec").onclick = () => { if ($("#showNsec").textContent === "显示") { $("#pfNsec").textContent = nip19.nsecEncode(sk); $("#showNsec").textContent = "复制"; } else copy(nip19.nsecEncode(sk)); };
+$("#showNsec").onclick = () => { if ($("#showNsec").textContent === tr("显示")) { $("#pfNsec").textContent = nip19.nsecEncode(sk); $("#showNsec").textContent = tr("复制"); } else copy(nip19.nsecEncode(sk)); };
 $("#pfPicBtn").onclick = () => $("#pfPic").click();
 $("#pfPic").onchange = async (e) => {
   let f = e.target.files[0]; e.target.value = ""; if (!f) return;
-  $("#pfPicState").textContent = "正在上传…";
-  try { f = await compressImage(f, 512); const { url } = await uploadBlossom(f); pendingPicture = url; $("#pfAv").innerHTML = `<img class="avatar" src="${esc(url)}" alt="">`; $("#pfPicState").textContent = "已上传，点「保存并发布」生效"; }
-  catch (err) { $("#pfPicState").textContent = "上传失败：" + err.message; }
+  $("#pfPicState").textContent = tr("正在上传…");
+  try { f = await compressImage(f, 512); const { url } = await uploadBlossom(f); pendingPicture = url; $("#pfAv").innerHTML = `<img class="avatar" src="${esc(url)}" alt="">`; $("#pfPicState").textContent = tr("已上传，点「保存并发布」生效"); }
+  catch (err) { $("#pfPicState").textContent = tr("上传失败：") + err.message; }
 };
 $("#pfSave").onclick = async () => {
-  const n = $("#pfName").value.trim(); if (!n) return toast("昵称不能为空");
+  const n = $("#pfName").value.trim(); if (!n) return toast(tr("昵称不能为空"));
   const ok = await publishProfile({ name: n, headline: $("#pfHead").value.trim(), about: $("#pfAbout").value.trim(), picture: pendingPicture });
-  toast(`资料已发布到 ${ok} 个中继`);
+  toast(tr("资料已发布到 {0} 个中继", ok));
 };
 $("#closeProfile").onclick = () => { $("#profile").hidden = true; $("#pfNsec").textContent = "••••"; };
 
@@ -1184,21 +1270,21 @@ function applyTheme(t) { if (t) document.documentElement.dataset.theme = t; else
 applyTheme(ls.get("tc-theme", ""));
 function renderPinState() {
   $("#pinState").textContent = storedBlob
-    ? "已开启：私钥用你的密码加密保存，每次打开和离开 15 分钟后都要输入密码。"
-    : IS_MAC ? "未开启。私钥已由 macOS 钥匙串加密保护；再加一层密码可以防止别人用你没锁屏的电脑打开天窗。" : "未开启。私钥目前以明文保存在这台设备的浏览器里，强烈建议设置。";
-  $("#pinRemove").hidden = !storedBlob; $("#pinSave").textContent = storedBlob ? "修改密码" : "设置密码";
+    ? tr("已开启：私钥用你的密码加密保存，每次打开和离开 15 分钟后都要输入密码。")
+    : IS_MAC ? tr("未开启。私钥已由 macOS 钥匙串加密保护；再加一层密码可以防止别人用你没锁屏的电脑打开天窗。") : tr("未开启。私钥目前以明文保存在这台设备的浏览器里，强烈建议设置。");
+  $("#pinRemove").hidden = !storedBlob; $("#pinSave").textContent = storedBlob ? tr("修改密码") : tr("设置密码");
 }
 $("#openSettings").onclick = (e) => {
   e.preventDefault();
   $("#apiKey").value = getKey(); $("#relayList").value = relays.join("\n"); $("#srelayList").value = searchRelays.join("\n");
-  $("#logout").textContent = "退出账号（从本机删除私钥）"; $("#pinRemove").textContent = "移除密码"; delete $("#pinRemove").dataset.confirm;
+  $("#logout").textContent = tr("退出账号（从本机删除私钥）"); $("#pinRemove").textContent = tr("移除密码"); delete $("#pinRemove").dataset.confirm;
   renderPinState(); renderMuteList();
   const canNotify = IS_MAC || ("Notification" in window);
   $("#notifBtn").hidden = IS_MAC || !canNotify;
-  $("#notifHint").textContent = IS_MAC ? "天窗开着时，新回复、点赞、关注和私信会弹出系统通知，Dock 图标显示未读数。私信通知不显示内容。"
-    : !canNotify ? "这个浏览器不支持系统通知。iPhone 上需要先把天窗添加到主屏幕，再从主屏幕打开。"
-    : Notification.permission === "granted" ? "已开启。天窗开着时会提醒新消息，并在图标上显示未读数。没有推送服务器，关掉天窗后收不到提醒。"
-    : "开启后，天窗开着时会提醒新消息，并在主屏幕图标上显示未读数。没有推送服务器，关掉天窗后收不到提醒。";
+  $("#notifHint").textContent = IS_MAC ? tr("天窗开着时，新回复、点赞、关注和私信会弹出系统通知，Dock 图标显示未读数。私信通知不显示内容。")
+    : !canNotify ? tr("这个浏览器不支持系统通知。iPhone 上需要先把天窗添加到主屏幕，再从主屏幕打开。")
+    : Notification.permission === "granted" ? tr("已开启。天窗开着时会提醒新消息，并在图标上显示未读数。没有推送服务器，关掉天窗后收不到提醒。")
+    : tr("开启后，天窗开着时会提醒新消息，并在主屏幕图标上显示未读数。没有推送服务器，关掉天窗后收不到提醒。");
   $("#settings").hidden = false;
 };
 window.openTCSettings = () => $("#openSettings").click();
@@ -1207,33 +1293,33 @@ $$(".scrim").forEach((s) => (s.onclick = (e) => { if (e.target === s && !["onboa
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { ["settings", "profile", "panel"].forEach((id) => ($("#" + id).hidden = true)); panelMode = null; $("#mentionBox").hidden = true; } });
 $("#pinSave").onclick = async () => {
   try {
-    const pin = checkPin($("#pinNew").value, $("#pinNew2").value); if (!pin) return toast("先输入新密码");
-    $("#pinSave").textContent = "正在加密…";
+    const pin = checkPin($("#pinNew").value, $("#pinNew2").value); if (!pin) return toast(tr("先输入新密码"));
+    $("#pinSave").textContent = tr("正在加密…");
     const blob = await sealSecret(toHex(sk), pin); await store.set(blob); storedBlob = blob;
-    $("#pinNew").value = $("#pinNew2").value = ""; renderPinState(); toast("解锁密码已保存");
-  } catch (e) { toast(e.message || "保存失败"); renderPinState(); }
+    $("#pinNew").value = $("#pinNew2").value = ""; renderPinState(); toast(tr("解锁密码已保存"));
+  } catch (e) { toast(e.message || tr("保存失败")); renderPinState(); }
 };
 $("#pinRemove").onclick = async () => {
   const b = $("#pinRemove");
-  if (b.dataset.confirm !== "1") { b.dataset.confirm = "1"; b.textContent = "确认移除？"; return; }
-  await store.set(toHex(sk)); storedBlob = null; delete b.dataset.confirm; b.textContent = "移除密码"; renderPinState(); toast("已移除解锁密码");
+  if (b.dataset.confirm !== "1") { b.dataset.confirm = "1"; b.textContent = tr("确认移除？"); return; }
+  await store.set(toHex(sk)); storedBlob = null; delete b.dataset.confirm; b.textContent = tr("移除密码"); renderPinState(); toast(tr("已移除解锁密码"));
 };
 $("#notifBtn").onclick = async () => {
-  try { const r = await Notification.requestPermission(); toast(r === "granted" ? "已开启通知" : "通知没有开启，可以在系统设置里打开"); updateBadges(); } catch (e) { toast("这个浏览器不支持通知"); }
+  try { const r = await Notification.requestPermission(); toast(r === "granted" ? tr("已开启通知") : tr("通知没有开启，可以在系统设置里打开")); updateBadges(); } catch (e) { toast(tr("这个浏览器不支持通知")); }
 };
-$("#saveKey").onclick = () => { const v = $("#apiKey").value.trim(); ls.set(KEY_SLOT, v); toast(v ? "API Key 已保存在本机" : "已清空"); };
-$("#clearKey").onclick = () => { $("#apiKey").value = ""; ls.del(KEY_SLOT); toast("API Key 已清除"); };
+$("#saveKey").onclick = () => { const v = $("#apiKey").value.trim(); ls.set(KEY_SLOT, v); toast(v ? tr("API Key 已保存在本机") : tr("已清空")); };
+$("#clearKey").onclick = () => { $("#apiKey").value = ""; ls.del(KEY_SLOT); toast(tr("API Key 已清除")); };
 $("#saveRelays").onclick = () => {
   const parse = (v) => [...new Set(v.split(/\s+/).map((s) => s.trim()).filter((s) => /^wss:\/\/[^\s]+$/.test(s)))];
-  const list = parse($("#relayList").value); if (!list.length) return toast("至少需要一个 wss:// 开头的中继");
+  const list = parse($("#relayList").value); if (!list.length) return toast(tr("至少需要一个 wss:// 开头的中继"));
   relays = list; searchRelays = parse($("#srelayList").value);
   ls.set("tc-relays", JSON.stringify(relays)); ls.set("tc-srelays", JSON.stringify(searchRelays));
-  relayState.clear(); dmRelayCache.clear(); probeRelays(); subscribeMain(); toast("已重连"); $("#settings").hidden = true;
+  relayState.clear(); dmRelayCache.clear(); probeRelays(); subscribeMain(); toast(tr("已重连")); $("#settings").hidden = true;
 };
 $("#resetRelays").onclick = () => { $("#relayList").value = DEFAULT_RELAYS.join("\n"); $("#srelayList").value = DEFAULT_SEARCH.join("\n"); };
 $("#themeSeg").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; applyTheme(b.dataset.th); ls.set("tc-theme", b.dataset.th); };
 $("#logout").onclick = async () => {
-  if ($("#logout").textContent !== "确认：从本机删除私钥") { $("#logout").textContent = "确认：从本机删除私钥"; return; }
+  if ($("#logout").textContent !== tr("确认：从本机删除私钥")) { $("#logout").textContent = tr("确认：从本机删除私钥"); return; }
   await store.clear(); try { indexedDB.deleteDatabase("tc-" + pk8()); } catch (e) {} location.reload();
 };
 
@@ -1254,31 +1340,32 @@ async function sample(input, opts = {}) {
   if (!text) throw { code: "upstream_error" };
   return { text };
 }
-const errCopy = (c) => ({ no_key: "在「设置」里填入你的 Anthropic API Key 即可使用 AI。密钥只保存在这台设备上。", bad_key: "API Key 无效，请在「设置」里检查。", offline: "连不上 AI 服务，检查一下网络。", rate_limited: "请求太频繁，稍后再试。" }[c] || "AI 暂时没有响应，再点一次试试。");
+const errCopy = (c) => ({ no_key: tr("在「设置」里填入你的 Anthropic API Key 即可使用 AI。密钥只保存在这台设备上。"), bad_key: tr("API Key 无效，请在「设置」里检查。"), offline: tr("连不上 AI 服务，检查一下网络。"), rate_limited: tr("请求太频繁，稍后再试。") }[c] || tr("AI 暂时没有响应，再点一次试试。"));
 async function ask(prompt, out, head) {
   if (!out) return;
-  out.innerHTML = `<div class="aiout"><span class="h">${head}</span><span class="b">思考中…</span></div>`;
+  out.innerHTML = `<div class="aiout"><span class="h">${head}</span><span class="b">${tr("思考中…")}</span></div>`;
   const b = out.querySelector(".b");
   try { await sample(prompt, { modelTier: "quick", onText: ({ text }) => (b.textContent = text) }); } catch (e) { b.textContent = errCopy(e.code); }
 }
 function postAI(kind, id) {
   const ev = events.get(id); if (!ev) return;
   const src = (tag(ev, "title") ? tag(ev, "title") + "\n" : "") + ev.content.slice(0, 8000);
+  const L = LANG_EN[LANG];
   const P = {
-    sum: ["一句话摘要", "用一句中文概括这条帖子的核心观点（不超过40字），只输出这句话：\n\n"],
-    counter: ["反方观点", "你是一位严谨的买方研究员。针对下面这条观点，给出最有力的2-3条反方论据，用金融从业者的语言，每条一句，不要客套：\n\n"],
-    terms: ["术语解释", "把下面帖子里的专业术语挑出来，每个用一句大白话解释，最多4个，格式'术语：解释'：\n\n"],
-    en: ["English", "Translate this post into natural, concise English as a finance professional would write it. Output only the translation:\n\n"],
+    sum: [tr("一句话摘要"), `Summarize the core argument of the post below in ONE sentence (max ~25 words). Write it in ${L}. Output only that sentence.\n\n`],
+    counter: [tr("反方观点"), `You are a rigorous buy-side analyst. Give the 2-3 strongest counterarguments to the view below, in the language of a finance professional, one sentence each, no pleasantries. Write in ${L}.\n\n`],
+    terms: [tr("术语解释"), `Pick out the technical or financial terms in the post below and explain each in one plain sentence, at most 4, formatted as "term: explanation". Write the explanations in ${L}.\n\n`],
+    en: [tr("翻译"), `Translate the post below into natural, concise ${L}, as a finance professional would write it. Keep numbers, tickers and names unchanged. Output only the translation.\n\n`],
   }[kind];
   const outs = $$("#ai" + id); ask(P[1] + src, outs[outs.length - 1], P[0]);
 }
 function composeAI(kind) {
-  const text = $("#body").value.trim(), box = $("#composeAI"); if (!text) return toast("先写点内容");
+  const text = $("#body").value.trim(), box = $("#composeAI"); if (!text) return toast(tr("先写点内容"));
   box.hidden = false;
   const P = {
-    polish: ["润色", "在不改变观点和立场的前提下，把下面这段中文帖子改得更清晰、更像资深从业者写的，保留原有数字。只输出改写后的正文：\n\n"],
-    title: ["标题建议", "为下面的帖子给出3个克制、不标题党的中文标题，每行一个，不要编号：\n\n"],
-    check: ["发布前自检", "检查下面的帖子：1) 是否含承诺收益、保本、引流等可能被认为是诈骗的话术；2) 是否有需要披露的利益冲突；3) 有没有明显的事实或逻辑漏洞。每项一句话结论，最后给一个总体判断：'可以放心发布' 或 '建议修改'：\n\n"],
+    polish: [tr("润色"), "Rewrite the post below so it reads clearer and more like an experienced finance professional wrote it, without changing its views or stance. Keep all numbers. Keep the post in its original language. Output only the rewritten post.\n\n"],
+    title: [tr("标题建议"), "Suggest 3 restrained, non-clickbait titles for the post below, in the same language as the post. One per line, no numbering.\n\n"],
+    check: [tr("发布前自检"), `Review the post below: 1) does it contain promised returns, "guaranteed" profits, or lead-generation wording that could be taken as a scam; 2) is there a conflict of interest that should be disclosed; 3) any obvious factual or logical gaps. One-sentence verdict per item, then an overall verdict: "${tr("可以放心发布")}" or "${tr("建议修改")}". Write in ${LANG_EN[LANG]}.\n\n`],
   }[kind];
   ask(P[1] + text, box, P[0]);
 }
@@ -1286,15 +1373,16 @@ const turns = [];
 $("#askForm").onsubmit = async (e) => {
   e.preventDefault(); const q = $("#askIn").value.trim(); if (!q) return; $("#askIn").value = "";
   const chat = $("#chat"); chat.insertAdjacentHTML("beforeend", `<div class="msg u">${esc(q)}</div>`);
-  const a = document.createElement("div"); a.className = "msg a"; a.textContent = "思考中…"; chat.append(a); chat.scrollTop = chat.scrollHeight;
-  const ctx = [...posts.values()].filter((ev) => !mutes.has(ev.pubkey)).sort((x, y) => sortTime(y) - sortTime(x)).slice(0, 30).map((ev) => `[${nameOf(ev.pubkey)}｜披露:${holdLab[tag(ev, "disclosure")]?.[0] || "未披露"}] ${tag(ev, "title") ? tag(ev, "title") + "：" : ""}${ev.content.slice(0, 600)}`).join("\n");
+  const a = document.createElement("div"); a.className = "msg a"; a.textContent = tr("思考中…"); chat.append(a); chat.scrollTop = chat.scrollHeight;
+  const ctx = [...posts.values()].filter((ev) => !mutes.has(ev.pubkey)).sort((x, y) => sortTime(y) - sortTime(x)).slice(0, 30).map((ev) => `[${nameOf(ev.pubkey)}| disclosure: ${HOLD_EN[tag(ev, "disclosure")] || "none stated"}] ${tag(ev, "title") ? tag(ev, "title") + ": " : ""}${ev.content.slice(0, 600)}`).join("\n");
   turns.push({ role: "user", content: q });
   try {
-    const { text } = await sample([{ role: "user", content: "你是社交平台「天窗」里的研究助手，用简洁的中文、金融从业者的口吻回答，区分事实与观点，指出分歧。以下是当前信息流：\n" + (ctx || "（信息流为空）") }, ...turns.slice(-8)], { onText: ({ text }) => { a.textContent = text; chat.scrollTop = chat.scrollHeight; } });
+    const { text } = await sample([{ role: "user", content: `You are the research assistant inside Skylight (天窗), a free-expression social app. Answer concisely in ${LANG_EN[LANG]}, in the voice of a finance professional. Separate facts from opinions and point out where people disagree. Here is the current feed:\n` + (ctx || "(the feed is empty)") }, ...turns.slice(-8)], { onText: ({ text }) => { a.textContent = text; chat.scrollTop = chat.scrollHeight; } });
     turns.push({ role: "assistant", content: text });
   } catch (err) { a.textContent = errCopy(err.code); turns.pop(); }
 };
 
 window.addEventListener("pagehide", () => cache.flush());
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+applyLang();
 boot();
