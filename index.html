@@ -315,44 +315,133 @@ body{padding-top:env(safe-area-inset-top,0px)}
   .ctools .ibtn{padding:6px 8px}
 }
 </style>
+<style>
+/* 0.3 新增 */
+.badge-n{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--red);color:#fff;font-size:11px;font-style:normal;font-weight:700;line-height:1;margin-left:auto;font-variant-numeric:tabular-nums}
+.tabbar button{position:relative}
+.tabbar .badge-n{position:absolute;top:-3px;left:calc(50% + 5px);margin:0}
+img.avatar{object-fit:cover;display:block;background:var(--surface);flex:none}
+img.mini{display:inline-block;object-fit:cover;vertical-align:-4px;margin-right:5px;width:18px;height:18px;border-radius:50%}
+.post>.avatar,.post>img.avatar{cursor:pointer}
+.who b[data-user]{cursor:pointer}
+.who b[data-user]:hover{text-decoration:underline}
+a.mention,a.tag{color:var(--green);text-decoration:none;font-weight:500}
+a.mention:hover,a.tag:hover{text-decoration:underline}
+.quote{margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:14px;cursor:pointer;display:grid;gap:4px;min-width:0}
+.quote:hover{background:var(--surface)}
+.quote .qhead{font-size:13px;color:var(--muted)}
+.quote .qhead b{color:var(--fg)}
+.quote div{word-wrap:break-word;white-space:pre-wrap}
+.repost-head{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-bottom:4px}
+.repost-head svg{width:14px;height:14px}
+.actions{max-width:520px}
+.act.on{color:var(--green)}
+.act.like.on{color:var(--red)}
+.more-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.more-row button{border:1px solid var(--line);background:none;border-radius:999px;padding:3px 12px;font-size:12px}
+.more-row button.danger{color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent)}
+.loadmore{display:block;margin:16px auto 28px;border:1px solid var(--line);background:none;border-radius:999px;padding:8px 22px;font-size:14px}
+.search-note{padding:10px 18px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line)}
+.feed-head{padding:16px 18px 8px;display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.feed-head h2{margin:0;font-weight:900;font-size:22px}
+.notif{display:grid;grid-template-columns:36px minmax(0,1fr);gap:10px;padding:12px 18px;border-bottom:1px solid var(--line);cursor:pointer}
+.notif:hover{background:var(--surface)}
+.notif.unread{background:var(--green-soft)}
+.notif .avatar{width:36px;height:36px;font-size:14px}
+.notif .line{font-size:14px}
+.notif .snip{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.notif .time{font-size:12px;color:var(--muted)}
+.cover-img{width:100%;display:block;max-height:320px;object-fit:cover;background:var(--ink)}
+.sheet.wide{width:min(680px,100%);padding:0;gap:0}
+.sheet.wide .panel-top{position:sticky;top:0;background:var(--bg);display:flex;justify-content:flex-end;padding:10px 14px;border-bottom:1px solid var(--line);z-index:2}
+.u-head{padding:18px 20px;display:grid;gap:8px;border-bottom:1px solid var(--line);justify-items:start}
+.u-head .avatar{width:64px;height:64px;font-size:26px}
+.u-head h2{margin:0;font-weight:900;font-size:22px}
+.u-head .about{white-space:pre-wrap;font-size:14px}
+.u-head .copy-row{width:100%}
+.u-actions{display:flex;flex-wrap:wrap;gap:8px}
+.mention-box{display:grid;gap:2px;border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:4px;margin-top:4px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+.mention-box button{display:flex;align-items:center;gap:6px;border:0;background:none;padding:6px 8px;border-radius:8px;text-align:left;font-size:14px}
+.mention-box button:hover{background:var(--surface)}
+.mention-box .key{margin-left:auto}
+.quote-box{position:relative;margin-top:8px}
+.quote-box .x{position:absolute;top:6px;right:6px;border:0;background:var(--surface);border-radius:999px;width:24px;height:24px;line-height:1}
+.newgroup{display:grid;gap:6px;padding:0 14px 12px;border-bottom:1px solid var(--line)}
+.newgroup input,.newgroup textarea{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 10px;outline:none;font-size:13px;resize:vertical;width:100%}
+.newgroup .solid{justify-self:end}
+.link-btn{border:0;background:none;color:var(--green);font-size:13px;padding:8px 14px;text-align:left;font-weight:700}
+.conv .unread{margin-left:auto;flex:none}
+.conv img.avatar{width:38px;height:38px}
+.th-top img.avatar{width:34px;height:34px}
+.bub .file img,.bub .file video{max-width:min(300px,100%);border-radius:10px;display:block;margin-top:2px}
+.bub .file audio{max-width:260px}
+.bub .file a{color:inherit;text-decoration:underline}
+.bub .file .filebtn{border:0;background:rgba(0,0,0,.08);color:inherit;border-radius:8px;padding:6px 10px}
+.bub .from{font-size:11px;font-weight:700;opacity:.8;margin-bottom:2px}
+.composer-dm .att{flex:none;display:grid;place-items:center;width:38px;padding:0}
+.pf-pic{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pf-pic .avatar{width:48px;height:48px;font-size:18px}
+.mute-list{display:grid;gap:6px}
+.mute-list div{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px}
+.mute-list button{border:1px solid var(--line);background:none;border-radius:999px;padding:2px 10px;font-size:12px;flex:none}
+.mono-in{font-family:ui-monospace,Menlo,monospace}
+.msearch{display:none}
+.nav a .badge-n{margin-left:auto}
+@media (max-width:1100px){.nav a .badge-n{position:absolute;margin:0 0 0 18px;transform:translateY(-10px)}.nav a{position:relative}}
+@media (max-width:860px){
+  .sheet.wide{max-height:92dvh}
+  .actions{max-width:none;justify-content:space-between}
+  .actions .act{padding:4px 2px}
+  .mhead{gap:10px}
+  .msearch{display:block;flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;outline:none}
+  .feed-head{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .notif{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
+</style>
 
 </head><body>
 <div class="app">
   <nav class="nav" aria-label="主导航">
     <div class="brand"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--ink)"/><path d="M9 7h14l5 18H4z" fill="#00BB77" opacity=".22"/><rect x="9" y="7" width="14" height="10" rx="1.5" fill="#00BB77"/><path d="M16 7v10M9 12h14" stroke="var(--ink)" stroke-width="1.6"/></svg><b>天窗</b><span>Skylight</span></div>
     <a href="#" class="on" data-go="plaza"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>首页</span></a>
+    <a href="#" data-go="notif"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg><span>通知</span><i class="badge-n" id="bNotif" hidden></i></a>
+    <a href="#" data-go="dm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>加密私信</span><i class="badge-n" id="bDM" hidden></i></a>
     <a href="#" data-go="discover"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="11" rx="2"/><rect x="13" y="3" width="8" height="7" rx="2"/><rect x="3" y="16" width="8" height="5" rx="2"/><rect x="13" y="12" width="8" height="9" rx="2"/></svg><span>发现</span></a>
-    <a href="#" data-go="dm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span>加密私信</span></a>
     <a href="#" data-go="long"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h14M5 9h14M5 14h9M5 19h6"/></svg><span>长文</span></a>
-    <a href="#" data-go="media"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>声音与视频</span></a>
+    <a href="#" data-go="bookmarks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>收藏</span></a>
     <a href="#" id="openProfile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/></svg><span>个人档案</span></a>
     <a href="#" id="openSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg><span>设置</span></a>
     <button class="post-btn" id="focusCompose"><span>发布</span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" style="display:none"><path d="M12 5v14M5 12h14"/></svg></button>
     <div class="me" id="meCard">
-      <div class="avatar" id="meAv" style="background:#0b0d0c;width:38px;height:38px;font-size:14px">你</div>
+      <span id="meAv"><span class="avatar" style="background:#0b0d0c;width:38px;height:38px;font-size:14px">你</span></span>
       <div class="who2" style="min-width:0"><b style="font-size:14px" id="meName">未登录</b><div class="key" id="meKey">—</div></div>
     </div>
   </nav>
 
   <main class="main">
-    <div class="mhead"><b style="display:flex;align-items:center;gap:8px"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--ink)"/><path d="M9 7h14l5 18H4z" fill="#00BB77" opacity=".22"/><rect x="9" y="7" width="14" height="10" rx="1.5" fill="#00BB77"/><path d="M16 7v10M9 12h14" stroke="var(--ink)" stroke-width="1.6"/></svg>天窗</b><span class="key" id="mNet">连接中继…</span></div>
+    <div class="mhead"><b style="display:flex;align-items:center;gap:8px"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--ink)"/><path d="M9 7h14l5 18H4z" fill="#00BB77" opacity=".22"/><rect x="9" y="7" width="14" height="10" rx="1.5" fill="#00BB77"/><path d="M16 7v10M9 12h14" stroke="var(--ink)" stroke-width="1.6"/></svg>天窗</b><input id="q2" class="msearch" placeholder="搜索全网" enterkeyhint="search" autocomplete="off"><span class="key" id="mNet">连接中继…</span></div>
     <div class="tabs" role="tablist">
       <button class="on" data-tab="plaza" role="tab">天窗广场</button>
       <button data-tab="follow" role="tab">关注</button>
+      <button data-tab="hot" role="tab">热门</button>
       <button data-tab="discover" role="tab">发现</button>
       <button data-tab="long" role="tab">长文</button>
       <button data-tab="media" role="tab">声音·视频</button>
+      <button data-tab="bookmarks" role="tab">收藏</button>
+      <button data-tab="search" role="tab" id="tabSearch" hidden>搜索</button>
     </div>
 
     <section class="composer" id="composer">
-      <div class="avatar" id="compAv" style="background:#0b0d0c">你</div>
+      <span id="compAv"><span class="avatar" style="background:#0b0d0c">你</span></span>
       <div style="min-width:0">
         <div class="modes" id="modes">
           <button class="on" data-mode="short">短帖</button>
           <button data-mode="article">长文</button>
         </div>
         <input id="title" placeholder="长文标题" hidden>
-        <textarea id="body" placeholder="打开天窗说亮话。观点不需要被审批。"></textarea>
+        <textarea id="body" placeholder="打开天窗说亮话。观点不需要被审批。输入 @ 可以提到别人。"></textarea>
+        <div class="mention-box" id="mentionBox" hidden></div>
+        <div class="quote-box" id="quoteBox" hidden></div>
         <div class="media-prev" id="mediaPrev"></div>
         <div class="uploading" id="upState" hidden></div>
         <div class="disclose">
@@ -383,13 +472,19 @@ body{padding-top:env(safe-area-inset-top,0px)}
       <div class="dm-list">
         <div class="dm-head"><h2>私信</h2><span class="e2e"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>NIP-17 加密 · 中继看不到内容和收发双方</span></div>
         <form class="newchat" id="newChat"><input id="newChatIn" placeholder="对方的 npub…" autocomplete="off"><button>新对话</button></form>
+        <button class="link-btn" id="ngToggle" type="button">＋ 新建加密群聊</button>
+        <form class="newgroup" id="newGroup" hidden>
+          <input id="ngName" placeholder="群名，比如：宏观小组" maxlength="40">
+          <textarea id="ngMembers" placeholder="成员的 npub，每行一个"></textarea>
+          <button class="solid">创建群聊</button>
+        </form>
         <div id="convs"></div>
         <div class="room-note" id="roomNote">把你的 npub 发给朋友，对方在天窗里点「新对话」粘贴即可开始加密聊天。</div>
       </div>
       <div class="thread">
         <div class="th-top">
           <button class="icon-btn back" id="dmBack">‹ 返回</button>
-          <div class="avatar" id="thAv">?</div>
+          <span id="thAv"><span class="avatar">?</span></span>
           <div class="grow"><b id="thName">选择一个对话</b><div id="thSub" class="badge-u">—</div></div>
           <select id="timer" title="阅后即焚">
             <option value="0">阅后即焚：关</option><option value="3600">1 小时</option><option value="86400">1 天</option><option value="604800">7 天</option>
@@ -403,7 +498,11 @@ body{padding-top:env(safe-area-inset-top,0px)}
           <button class="verify" id="verifyBtn">标记为已验证</button>
         </div>
         <div class="msgs" id="msgs"><div class="sys">从左侧选择一个对话，或粘贴对方的 npub 开始新对话。</div></div>
-        <form class="composer-dm" id="dmForm"><input id="dmIn" placeholder="加密消息…" autocomplete="off"><button>发送</button></form>
+        <form class="composer-dm" id="dmForm">
+          <input type="file" id="dmFile" class="hidden-file">
+          <button type="button" class="icon-btn att" id="dmAttach" title="发送加密图片或文件"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7L14 4.5a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7.5"/></svg></button>
+          <input id="dmIn" placeholder="加密消息…" autocomplete="off"><button>发送</button>
+        </form>
       </div>
     </section>
   </main>
@@ -411,12 +510,12 @@ body{padding-top:env(safe-area-inset-top,0px)}
   <aside class="side">
     <div class="box me-actions">
       <div style="display:flex;gap:12px;align-items:center">
-        <div class="avatar" id="meAv2" style="background:#0b0d0c">你</div>
+        <span id="meAv2"><span class="avatar" style="background:#0b0d0c">你</span></span>
         <div style="min-width:0;flex:1"><b id="meName2" style="font-size:17px">未登录</b><div class="key" id="meKey2">—</div></div>
       </div>
-      <div class="row-btn" style="justify-content:flex-start;margin-top:12px"><button class="ghost" id="mProfile">个人档案与私钥备份</button><button class="ghost" id="mSettings">设置</button></div>
+      <div class="row-btn" style="justify-content:flex-start;margin-top:12px"><button class="ghost" id="mProfile">个人档案与私钥备份</button><button class="ghost" id="mBookmarks">我的收藏</button><button class="ghost" id="mSettings">设置</button></div>
     </div>
-    <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" placeholder="在已加载的帖子里搜索"></div>
+    <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" placeholder="搜索 · 回车搜全网" enterkeyhint="search" autocomplete="off"></div>
 
     <div class="box">
       <div class="eyebrow">关注</div>
@@ -435,6 +534,7 @@ body{padding-top:env(safe-area-inset-top,0px)}
     <div class="box filters">
       <div class="eyebrow">你的过滤器</div>
       <h3>由你决定看什么</h3>
+      <label><span>广场只看我的关系网<small>我关注的人，以及他们关注的人</small></span><input type="checkbox" class="sw" id="fWot"></label>
       <label><span>隐藏含商业推广的帖子<small>依据作者披露</small></span><input type="checkbox" class="sw" id="fPromo"></label>
       <label><span>折叠"承诺收益"类内容<small>识别保本、稳赚、带单话术</small></span><input type="checkbox" class="sw" id="fScam" checked></label>
     </div>
@@ -450,15 +550,15 @@ body{padding-top:env(safe-area-inset-top,0px)}
       <div class="eyebrow">正在热议</div>
       <div class="trend" id="trend" style="margin-top:8px"></div>
     </div>
-    <p class="foot">天窗 0.2 · 基于 Nostr 协议</p>
+    <p class="foot">天窗 0.3.0 · 基于 Nostr 协议</p>
   </aside>
 </div>
 
 <nav class="tabbar" aria-label="底部导航">
   <button class="on" data-tab="plaza"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>首页</button>
-  <button data-tab="discover"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="11" rx="2"/><rect x="13" y="3" width="8" height="7" rx="2"/><rect x="3" y="16" width="8" height="5" rx="2"/><rect x="13" y="12" width="8" height="9" rx="2"/></svg>发现</button>
+  <button data-tab="notif"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>通知<i class="badge-n" id="bNotif2" hidden></i></button>
   <button data-tab="compose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 8v8M8 12h8"/></svg>发布</button>
-  <button data-tab="dm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>私信</button>
+  <button data-tab="dm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>私信<i class="badge-n" id="bDM2" hidden></i></button>
   <button data-tab="me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/></svg>我</button>
 </nav>
 
@@ -481,17 +581,45 @@ body{padding-top:env(safe-area-inset-top,0px)}
       <label class="fl" for="obNsec">私钥（nsec…）</label>
       <input id="obNsec" type="password" placeholder="nsec1…" autocomplete="off">
     </div>
+    <div>
+      <label class="fl" for="obPin" style="margin-top:4px;display:block" id="obPinLabel">解锁密码</label>
+      <input id="obPin" type="password" placeholder="至少 6 位" autocomplete="new-password">
+      <input id="obPin2" type="password" placeholder="再输一次" autocomplete="new-password" style="margin-top:6px">
+      <p class="hint" id="obPinHint" style="margin-top:6px">私钥会用这个密码加密后保存在本机，别人拿到你的设备也解不开。忘了密码只能用私钥备份重新导入。</p>
+    </div>
     <div class="warn-box" id="obErr" hidden></div>
     <div class="row-btn"><button class="solid" id="obGo">进入天窗</button></div>
   </div>
 </div>
 
-<!-- 备份私钥 / 个人档案 -->
+<!-- 锁屏 -->
+<div class="scrim" id="lock" hidden>
+  <div class="sheet" role="dialog" aria-labelledby="lockTitle">
+    <h2 id="lockTitle">天窗已锁定</h2>
+    <p class="hint">输入解锁密码。你的私钥用这个密码加密保存在本机。</p>
+    <form id="lockForm" style="display:grid;gap:10px">
+      <input id="lockIn" type="password" placeholder="解锁密码" autocomplete="current-password">
+      <div class="warn-box" id="lockErr" hidden></div>
+      <div class="row-btn"><button type="button" class="ghost" id="lockForgot">忘记密码</button><button class="solid" id="lockGo">解锁</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- 个人主页 / 帖子详情 -->
+<div class="scrim" id="panel" hidden>
+  <div class="sheet wide" role="dialog" aria-label="详情">
+    <div class="panel-top"><button class="ghost" id="panelClose">关闭</button></div>
+    <div id="panelBody"></div>
+  </div>
+</div>
+
+<!-- 个人档案 / 备份私钥 -->
 <div class="scrim" id="profile" hidden>
   <div class="sheet" role="dialog" aria-labelledby="pfTitle">
     <h2 id="pfTitle">个人档案</h2>
     <label class="fl">你的公开账号（发给朋友，用来关注和私信你）</label>
     <div class="copy-row"><div class="mono" id="pfNpub"></div><button class="ghost" id="copyNpub">复制</button></div>
+    <div class="pf-pic"><span id="pfAv"></span><input type="file" id="pfPic" class="hidden-file" accept="image/*"><button class="ghost" id="pfPicBtn">更换头像</button><span class="hint" id="pfPicState"></span></div>
     <label class="fl" for="pfName" style="margin-top:6px">昵称</label>
     <input id="pfName" maxlength="40">
     <label class="fl" for="pfHead">一句话身份</label>
@@ -501,7 +629,7 @@ body{padding-top:env(safe-area-inset-top,0px)}
     <div class="row-btn"><button class="solid" id="pfSave">保存并发布</button></div>
     <hr>
     <label class="fl">备份私钥</label>
-    <div class="warn-box">私钥丢了账号就找不回来；被别人拿到，对方就能冒充你。抄在纸上或存进密码管理器，不要发给任何人。</div>
+    <div class="warn-box">私钥丢了账号就找不回来；被别人拿到，对方就能冒充你、读你的私信。抄在纸上或存进密码管理器，不要发给任何人。</div>
     <div class="copy-row"><div class="mono" id="pfNsec">••••••••••••••••••••••••••••••••</div><button class="ghost" id="showNsec">显示</button></div>
     <button class="ghost close" id="closeProfile">完成</button>
   </div>
@@ -510,13 +638,28 @@ body{padding-top:env(safe-area-inset-top,0px)}
 <div class="scrim" id="settings" hidden>
   <div class="sheet" role="dialog" aria-labelledby="setTitle">
     <h2 id="setTitle">设置</h2>
+    <div class="fl">解锁密码</div>
+    <p class="hint" id="pinState"></p>
+    <input id="pinNew" type="password" placeholder="新密码（至少 6 位）" autocomplete="new-password">
+    <input id="pinNew2" type="password" placeholder="再输一次" autocomplete="new-password">
+    <div class="row-btn"><button class="ghost" id="pinRemove">移除密码</button><button class="solid" id="pinSave">保存密码</button></div>
+    <hr>
+    <div class="fl">通知</div>
+    <p class="hint" id="notifHint">打开 app 时会实时提醒新回复、点赞、关注和私信，并在图标上显示未读数。</p>
+    <div class="row-btn" style="justify-content:flex-start"><button class="ghost" id="notifBtn">开启系统通知与图标角标</button></div>
+    <hr>
+    <div class="fl">屏蔽名单</div>
+    <div class="mute-list" id="muteList"></div>
+    <hr>
     <label for="apiKey" class="fl">Anthropic API Key</label>
     <input id="apiKey" type="password" placeholder="sk-ant-…" autocomplete="off">
-    <p class="hint">用于帖子摘要、反方观点、发布自检和研究助手。密钥只保存在这台电脑上，直接发往 Anthropic。</p>
+    <p class="hint">用于帖子摘要、反方观点、发布自检和研究助手。密钥只保存在这台设备上，直接发往 Anthropic。</p>
     <div class="row-btn"><button class="ghost" id="clearKey">清除</button><button class="solid" id="saveKey">保存</button></div>
     <hr>
     <label for="relayList" class="fl">中继服务器（每行一个）</label>
     <textarea id="relayList" style="min-height:120px;font-family:ui-monospace,Menlo,monospace;font-size:12px"></textarea>
+    <label for="srelayList" class="fl">全网搜索用的中继</label>
+    <textarea id="srelayList" style="min-height:56px;font-family:ui-monospace,Menlo,monospace;font-size:12px"></textarea>
     <p class="hint">发布时同时写入所有中继。自建中继填在这里即可。</p>
     <div class="row-btn"><button class="ghost" id="resetRelays">恢复默认</button><button class="solid" id="saveRelays">保存并重连</button></div>
     <hr>
@@ -524,12 +667,12 @@ body{padding-top:env(safe-area-inset-top,0px)}
     <div class="seg" id="themeSeg"><button data-th="">跟随系统</button><button data-th="light">浅色</button><button data-th="dark">深色</button></div>
     <hr>
     <button class="ghost" id="logout" style="justify-self:start;color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent)">退出账号（从本机删除私钥）</button>
-    <p class="hint">天窗 0.2 · 打开天窗说亮话</p>
+    <p class="hint">天窗 0.3.0 · 代码指纹 <span class="mono-in">74de 6be9 bd58 016d</span><br>指纹和 GitHub 仓库里 FINGERPRINT.txt 一致，说明你运行的代码没被替换。</p>
     <button class="ghost close" id="closeSettings">完成</button>
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
 
-<script src="vendor/nostr.bundle.js"></script>
-<script src="app.js"></script>
+<script src="vendor/nostr.bundle.js" integrity="sha384-7QhkjSj3gv2n85FuieRm3v1PhqM4Ux9EELcYHVSkMiCw+Y6DMhCNnHpkPHRjYmcN"></script>
+<script src="app.js" integrity="sha384-VxQJitaf0yEWF43pGjZb4jKesbBOZOnDWdu5eDnKDv0afIH7XJBephfcWagBqQRE"></script>
 </body></html>
