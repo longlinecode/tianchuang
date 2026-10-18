@@ -1,5 +1,6 @@
-天窗 0.3.0
-代码指纹：74de6be9bd58016d
-计算方法：sha256(app.js + vendor/nostr.bundle.js) 的前 16 位
-app.js  sha384: sha384-VxQJitaf0yEWF43pGjZb4jKesbBOZOnDWdu5eDnKDv0afIH7XJBephfcWagBqQRE
+天窗 0.4.0
+代码指纹：bd59c8bf059750c7
+计算方法：sha256(app.js + vendor/nostr.bundle.js + vendor/i18n.js) 的前 16 位
+app.js  sha384: sha384-jXGHkxGgqGU0Hac3PDDqpAFptXD+xfuyWQg0S93pmDzYrwK3eDD+HEx/RKs2eWyZ
 nostr.bundle.js sha384: sha384-7QhkjSj3gv2n85FuieRm3v1PhqM4Ux9EELcYHVSkMiCw+Y6DMhCNnHpkPHRjYmcN
+i18n.js sha384: sha384-sOOiLmayQY5noIWtgSCGc0XqNggwMYtNli0Z6dx6H6ncAnUtwjw4mWmMYuWr+omC
