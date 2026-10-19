@@ -3,6 +3,6 @@
 基于 Nostr 协议的自由表达社交客户端（支持 12 种界面语言）：公开帖子、长文、媒体，以及 NIP-17 端到端加密私信和群聊。
 
 - 网页版：https://longlinecode.github.io/tianchuang/
-- 当前版本：0.4.0，代码指纹 `bd59c8bf059750c7`（见 FINGERPRINT.txt）
+- 当前版本：0.5.0，代码指纹 `2373468136bbf0ec`（见 FINGERPRINT.txt）
 
 在 app 的「设置」底部可以看到你正在运行的代码指纹。和这里一致，说明你运行的代码没有被替换。
