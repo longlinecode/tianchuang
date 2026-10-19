@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>天窗</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src wss: https:; img-src 'self' https: data: blob:; media-src https: blob:; worker-src 'self'; manifest-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src wss: https:; img-src 'self' https: data: blob:; media-src https: blob: data:; worker-src 'self'; manifest-src 'self'">
 <meta name="description" content="天窗 · 打开天窗说亮话">
 <meta name="theme-color" content="#0b0d0c">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -417,8 +417,222 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
 [dir="rtl"] .bub.mine{border-bottom-right-radius:16px;border-bottom-left-radius:4px}
 [dir="rtl"] .bub.them{border-bottom-left-radius:16px;border-bottom-right-radius:4px}
 </style>
+<style>
+/* ===== 0.5：视觉身份 ===== */
+.skyband{position:fixed;top:0;left:0;right:0;height:3px;z-index:30;background:linear-gradient(90deg,transparent,var(--green) 30%,#5fe0ad 50%,var(--green) 70%,transparent);opacity:.9;pointer-events:none}
+body.mac-app .skyband{top:30px}
+.nav a.on{color:var(--green)}
+.nav a.on svg{stroke:var(--green)}
+.tabs button.on::after{background:var(--green);box-shadow:0 0 12px color-mix(in srgb,var(--green) 60%,transparent)}
+.post{padding:14px 18px}
+.post .who{display:flex;align-items:baseline;gap:6px;flex-wrap:nowrap;min-width:0}
+.post .who b{flex:none}
+.post .who .headline{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;color:var(--muted)}
+.post .who .time{flex:none}
+.post .who .follow-btn{flex:none}
+.actions{max-width:none;margin-top:8px;gap:2px}
+.act.ai-toggle{font-weight:900;font-size:12px;letter-spacing:.04em;border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+.act.ai-toggle.on,.act.ai-toggle:hover{border-color:var(--green);color:var(--green)}
+.aibar{margin-top:6px}
+.labels{margin-top:6px}
+.lab i{font-style:normal}
+a.ticker{color:var(--fg);background:var(--green-soft);border-radius:4px;padding:0 4px;font-weight:700;text-decoration:none;font-variant-numeric:tabular-nums}
+a.ticker:hover{background:var(--green);color:#fff}
+.chip{border:1px solid var(--line);background:none;border-radius:999px;padding:3px 10px;font-size:13px;color:var(--fg);margin:2px 4px 2px 0;display:inline-flex;gap:6px;align-items:center}
+.chip span{color:var(--muted)}
+.chip .lab{padding:0 5px;font-size:11px}
+/* 长文卡片 */
+.art{margin-top:8px;border:1px solid var(--line);border-radius:12px;overflow:hidden;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;background:var(--bg)}
+.art:hover{border-color:color-mix(in srgb,var(--green) 50%,var(--line))}
+.art-cover{width:140px;height:100%;object-fit:cover;order:2;max-height:150px}
+.art-t{padding:14px 16px;min-width:0}
+.art .ptitle{margin:0 0 6px;font-size:18px}
+.art-sum{font-size:14px;color:var(--muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.art-meta{margin-top:8px;font-size:12px;color:var(--muted)}
+.art-open{color:var(--green);font-weight:700}
+/* 投票 */
+.poll{margin-top:10px;display:grid;gap:6px}
+.poll-opt-btn{border:1px solid var(--line);background:none;border-radius:10px;padding:9px 12px;text-align:left;font-size:14px}
+.poll-opt-btn:hover{border-color:var(--green);color:var(--green)}
+.poll-r{position:relative;border:1px solid var(--line);border-radius:10px;padding:8px 12px;display:flex;justify-content:space-between;overflow:hidden;font-size:14px}
+.poll-r i{position:absolute;left:0;top:0;bottom:0;background:var(--green-soft);z-index:0}
+.poll-r span,.poll-r b{position:relative;z-index:1}
+.poll-r.mine{border-color:var(--green)}
+.poll-meta{font-size:12px;color:var(--muted)}
+.poll-box{display:grid;gap:6px;margin-top:8px}
+.poll-box input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 10px;outline:none}
+.poll-dur{font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:center}
+.poll-dur select{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:3px 6px}
+/* 迷你发布框 */
+.composer.compact{grid-template-columns:44px minmax(0,1fr);align-items:center;padding:12px 18px}
+.mini-open{flex:1;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:10px 16px;color:var(--muted);font-size:15px;width:100%;cursor:text}
+.mini-open:hover{border-color:var(--green)}
+.mini-tools{grid-column:2;display:flex;gap:4px;margin-top:6px}
+/* 发布面板 */
+.compose-sheet{width:min(760px,100%);max-height:92dvh;display:flex;flex-direction:column;gap:8px;padding:16px 18px}
+.c-top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.c-top-r{display:flex;gap:8px;align-items:center}
+.count{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.count.over{color:var(--red);font-weight:700}
+.c-body{flex:1;min-height:0;overflow:auto}
+.c-edit{display:grid;gap:6px}
+#body{min-height:120px;font-size:17px;line-height:1.6;border:0;background:none;resize:vertical;outline:none;width:100%}
+#body.tall{min-height:320px;font-family:ui-monospace,Menlo,"SF Mono",monospace;font-size:15px}
+#title{font-size:22px;font-weight:900;border:0;background:none;outline:none;width:100%;padding:4px 0}
+.md-tools{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:6px}
+.md-tools button{border:0;background:none;border-radius:6px;min-width:30px;height:28px;padding:0 6px;font-size:14px;color:var(--fg)}
+.md-tools button:hover{background:var(--surface)}
+.c-preview{padding:8px 4px}
+.sugg{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.ctools{border-top:1px solid var(--line);padding-top:8px;margin-top:0}
+/* 阅读模式 */
+.reader{position:fixed;inset:0;z-index:70;background:var(--bg);overflow:auto;padding:0 0 60px;-webkit-overflow-scrolling:touch}
+.r-progress{position:sticky;top:0;height:3px;background:var(--green);width:0;z-index:2;transition:width .1s linear}
+.r-top{position:sticky;top:3px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(10px);z-index:1;border-bottom:1px solid var(--line)}
+body.mac-app .r-top{padding-top:34px}
+.r-meta{font-size:13px;color:var(--muted)}
+.r-wrap{display:grid;grid-template-columns:minmax(0,1fr);max-width:760px;margin:0 auto;padding:24px max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px))}
+.r-toc{position:fixed;right:max(16px,env(safe-area-inset-right,0px));top:70px;width:220px;max-height:60vh;overflow:auto;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:10px 12px;display:grid;gap:4px;z-index:3;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+body.mac-app .r-toc{top:96px}
+.r-toc a{color:var(--fg);text-decoration:none;font-size:13px;padding:3px 0}
+.r-toc a.l2{padding-left:10px}.r-toc a.l3{padding-left:20px;color:var(--muted)}
+.r-title{font-size:32px;font-weight:900;line-height:1.25;margin:0 0 12px;text-wrap:balance}
+.r-by{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px;margin-bottom:18px}
+.r-by b{color:var(--fg);cursor:pointer}
+.md{font-size:17px;line-height:1.8;max-width:68ch}
+.md h1{font-size:26px;margin:1.4em 0 .5em}.md h2{font-size:22px;margin:1.3em 0 .5em}.md h3{font-size:18px;margin:1.2em 0 .4em}
+.md p{margin:.8em 0}.md ul,.md ol{padding-left:1.4em}.md li{margin:.3em 0}
+.md blockquote{margin:1em 0;padding:4px 16px;border-left:3px solid var(--green);color:var(--muted)}
+[dir="rtl"] .md blockquote{border-left:0;border-right:3px solid var(--green)}
+.md img{max-width:100%;border-radius:10px;display:block;margin:1em 0;cursor:zoom-in}
+.md table{border-collapse:collapse;width:100%;font-size:15px;margin:1em 0;display:block;overflow-x:auto;font-variant-numeric:tabular-nums}
+.md th,.md td{border:1px solid var(--line);padding:6px 10px;text-align:left}
+.md th{background:var(--surface);font-weight:700}
+.md pre{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px;overflow-x:auto;font-size:13px;line-height:1.5}
+.md code{font-family:ui-monospace,Menlo,"SF Mono",monospace;font-size:.92em;background:var(--surface);border-radius:4px;padding:1px 5px}
+.md pre code{background:none;padding:0}
+.md a{color:var(--green)}
+.md hr{border:0;border-top:1px solid var(--line);margin:2em 0}
+.r-actions{margin-top:28px;border-top:1px solid var(--line);padding-top:12px}
+body.reading{overflow:hidden}
+/* 图片查看器 */
+.lightbox{position:fixed;inset:0;z-index:80;background:rgba(8,10,9,.96);display:flex;flex-direction:column;justify-content:center}
+.lb-x{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));right:calc(14px + env(safe-area-inset-right,0px));z-index:2;border:0;background:rgba(255,255,255,.12);color:#fff;width:40px;height:40px;border-radius:50%;font-size:24px;line-height:1}
+body.mac-app .lb-x{top:40px}
+.lb-track{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;height:100%;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.lb-track::-webkit-scrollbar{display:none}
+.lb-slide{flex:0 0 100%;scroll-snap-align:center;display:grid;place-items:center;padding:20px}
+.lb-slide img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
+.lb-dots{position:absolute;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:0;right:0;display:flex;justify-content:center;gap:6px}
+.lb-dots i{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.35)}
+.lb-dots i.on{background:#fff}
+.media img{cursor:zoom-in}
+/* 长按 / 更多菜单 */
+.ctx{position:fixed;z-index:90;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:6px;display:grid;min-width:170px}
+.ctx button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:14px;color:var(--fg)}
+.ctx button:hover{background:var(--surface)}
+.ctx button.danger{color:var(--red)}
+.ctx.sheet-mode{left:0!important;right:0;top:auto!important;bottom:0;border-radius:16px 16px 0 0;padding:10px 10px calc(14px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 30px rgba(0,0,0,.25)}
+.ctx.sheet-mode button{padding:13px 14px;font-size:16px}
+/* 下拉刷新 */
+.ptr{height:0;overflow:hidden;display:grid;place-items:center;color:var(--muted);transition:height .15s}
+.ptr.ready{color:var(--green)}
+.ptr.ready svg{transform:rotate(180deg)}
+.ptr.spin svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* 空状态插画 */
+.empty-art{width:120px;height:90px;color:var(--muted);opacity:.7;margin-bottom:4px}
+.empty{align-items:flex-start}
+/* 引导 */
+.steps{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.steps span{width:24px;height:24px;border-radius:50%;border:1px solid var(--line);display:grid;place-items:center;font-size:12px;color:var(--muted)}
+.steps span.on{background:var(--green);border-color:var(--green);color:#fff;font-weight:700}
+.steps i{flex:1;height:1px;background:var(--line)}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px}
+.sugg-list{display:grid;gap:6px;max-height:40vh;overflow:auto}
+.sugg-item{display:flex;align-items:center;gap:10px;padding:6px 0}
+.sugg-item.big{padding:8px 10px;border:1px solid var(--line);border-radius:12px}
+.sugg-item>div{flex:1;min-width:0}
+.sugg-item b{display:block;font-size:14px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sugg-item small{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sugg-item .avatar{width:36px;height:36px;font-size:14px}
+.qr-wrap{width:min(220px,70vw);margin:4px auto;padding:10px;background:#fff;border-radius:12px;border:1px solid var(--line)}
+.qr-wrap svg{display:block;width:100%;height:auto}
+.scan-wrap{position:relative;aspect-ratio:1;max-width:100%;background:#000;border-radius:12px;overflow:hidden}
+.scan-wrap video{width:100%;height:100%;object-fit:cover}
+.scan-frame{position:absolute;inset:14%;border:2px solid var(--green);border-radius:12px;box-shadow:0 0 0 999px rgba(0,0,0,.35)}
+/* 话题页 / 标的页 / 观点记录 */
+.topic-head h2{font-size:26px}
+.topic-stats{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.topic-stats b{font-size:18px;color:var(--fg);font-variant-numeric:tabular-nums}
+.topic-stats b.g{color:var(--green)}.topic-stats b.r{color:var(--red)}
+.spark{width:240px;max-width:100%;height:48px}
+.people{display:flex;gap:4px;flex-wrap:wrap}
+.people .mini{margin:0}
+.ai-out-wrap{width:100%}
+.ai-out-wrap .aiout{white-space:pre-wrap}
+.u-seg{margin-top:4px}
+.track-sum{padding:10px 20px 0;display:flex;flex-wrap:wrap;gap:4px}
+.track{display:grid}
+.track-row{display:grid;grid-template-columns:92px minmax(0,1fr) auto;gap:10px;padding:10px 20px;border-bottom:1px solid var(--line);font-size:14px;cursor:pointer;align-items:baseline}
+.track-row:hover{background:var(--surface)}
+.t-date{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.t-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t-tags{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.t-tags i{font-style:normal;font-size:11px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 5px;white-space:nowrap}
+/* 私信新增 */
+.dm-search{padding:6px 14px;border-bottom:1px solid var(--line)}
+.dm-search input{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;outline:none;font-size:13px}
+.newchat .icon-btn{flex:none;padding:4px 8px}
+.bub{position:relative}
+.bub .rq{font-size:12px;opacity:.8;border-left:2px solid currentColor;padding-left:8px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+[dir="rtl"] .bub .rq{border-left:0;border-right:2px solid currentColor;padding-left:0;padding-right:8px}
+.bub-tools{position:absolute;top:-10px;right:8px;display:none;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:1px 3px}
+.bub:hover .bub-tools{display:flex}
+.bub-tools button{border:0;background:none;color:var(--fg);font-size:13px;width:26px;height:22px;border-radius:999px}
+.bub-tools button:hover{background:var(--surface)}
+.reacts{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
+.reacts span{background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:0 7px;font-size:12px}
+.bub.mine .reacts span{background:rgba(255,255,255,.9);color:#0b0d0c;border-color:transparent}
+.emoji-pick{display:flex;gap:2px;flex-wrap:wrap;margin-top:6px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:3px}
+.emoji-pick button{border:0;background:none;font-size:18px;width:32px;height:30px;border-radius:999px}
+.emoji-pick button:hover{background:var(--surface)}
+.reply-bar{display:flex;align-items:center;gap:8px;padding:6px 14px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);background:var(--surface)}
+.reply-bar span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reply-bar button{border:0;background:none;font-size:18px;color:var(--muted)}
+.rec-hint{padding:6px 14px;font-size:13px;color:var(--red);text-align:center}
+#dmVoice.on{background:var(--red);color:#fff;border-color:var(--red)}
+.file.voice{display:flex;align-items:center;gap:8px}
+.file.voice audio{max-width:220px;height:36px}
+.grp-panel{border-bottom:1px solid var(--line);padding:10px 14px;display:grid;gap:8px;background:var(--surface)}
+.grp-row{display:flex;gap:6px}
+.grp-row input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:6px 12px;outline:none;font-size:13px}
+.grp-m{display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0}
+.grp-m b{cursor:pointer}
+.ghost.danger{color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent);justify-self:start}
+/* 手机 */
+@media (max-width:860px){
+  .composer.compact{padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px))}
+  .mini-tools{display:none}
+  .compose-sheet{max-height:100dvh;height:100dvh;border-radius:0;width:100%}
+  .scrim#compose{padding:0}
+  .art{grid-template-columns:minmax(0,1fr)}
+  .art-cover{width:100%;height:140px;order:0;max-height:140px}
+  .r-toc{left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));width:auto;top:64px}
+  .r-title{font-size:26px}
+  .md{font-size:16px}
+  .bub-tools{display:flex;position:static;border:0;background:none;padding:0;margin-top:2px;justify-content:flex-end;opacity:.6}
+  .track-row{grid-template-columns:minmax(0,1fr);gap:2px}
+  .t-text{white-space:normal}
+  .t-tags{justify-content:flex-start}
+  .post .who .headline{display:none}
+  .lb-slide{padding:0}
+}
+@media (max-width:1100px){.mini-tools{display:none}}
+</style>
 
 </head><body>
+<div class="skyband" aria-hidden="true"></div>
 <div class="app">
   <nav class="nav" aria-label="主导航">
     <div class="brand"><svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--ink)"/><path d="M9 7h14l5 18H4z" fill="#00BB77" opacity=".22"/><rect x="9" y="7" width="14" height="10" rx="1.5" fill="#00BB77"/><path d="M16 7v10M9 12h14" stroke="var(--ink)" stroke-width="1.6"/></svg><b data-noi18n>天窗</b><span>Skylight</span></div>
@@ -429,6 +643,7 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
     <a href="#" data-go="long"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h14M5 9h14M5 14h9M5 19h6"/></svg><span>长文</span></a>
     <a href="#" data-go="bookmarks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12v18l-6-4-6 4z"/></svg><span>收藏</span></a>
     <a href="#" id="openProfile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/></svg><span>个人档案</span></a>
+    <a href="#" id="openInvite"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v7h-7"/></svg><span>邀请朋友</span></a>
     <a href="#" id="openSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg><span>设置</span></a>
     <button class="post-btn" id="focusCompose"><span>发布</span><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" style="display:none"><path d="M12 5v14M5 12h14"/></svg></button>
     <div class="me" id="meCard">
@@ -438,6 +653,7 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
   </nav>
 
   <main class="main">
+    <div class="ptr" id="ptr" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 4v12M6 10l6 6 6-6"/></svg></div>
     <div class="mhead"><b style="display:flex;align-items:center;gap:8px"><svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--ink)"/><path d="M9 7h14l5 18H4z" fill="#00BB77" opacity=".22"/><rect x="9" y="7" width="14" height="10" rx="1.5" fill="#00BB77"/><path d="M16 7v10M9 12h14" stroke="var(--ink)" stroke-width="1.6"/></svg><span data-noi18n>天窗</span></b><input id="q2" class="msearch" placeholder="搜索全网" enterkeyhint="search" autocomplete="off"><span class="key" id="mNet">连接中继…</span></div>
     <div class="tabs" role="tablist">
       <button class="on" data-tab="plaza" role="tab">天窗广场</button>
@@ -450,39 +666,10 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
       <button data-tab="search" role="tab" id="tabSearch" hidden>搜索</button>
     </div>
 
-    <section class="composer" id="composer">
+    <section class="composer compact" id="composer">
       <span id="compAv"><span class="avatar" style="background:#0b0d0c">你</span></span>
-      <div style="min-width:0">
-        <div class="modes" id="modes">
-          <button class="on" data-mode="short">短帖</button>
-          <button data-mode="article">长文</button>
-        </div>
-        <input id="title" placeholder="长文标题" hidden>
-        <textarea id="body" placeholder="打开天窗说亮话。观点不需要被审批。输入 @ 可以提到别人。"></textarea>
-        <div class="mention-box" id="mentionBox" hidden></div>
-        <div class="quote-box" id="quoteBox" hidden></div>
-        <div class="media-prev" id="mediaPrev"></div>
-        <div class="uploading" id="upState" hidden></div>
-        <div class="disclose">
-          <span>利益披露</span>
-          <select id="holding">
-            <option value="none">未持有相关标的</option>
-            <option value="long">持有多头头寸</option>
-            <option value="short">持有空头头寸</option>
-            <option value="paid">含商业推广</option>
-          </select>
-          <span>· 披露随帖子一起签名发布</span>
-        </div>
-        <div class="ctools">
-          <input type="file" id="fMedia" class="hidden-file" accept="video/*,audio/*,image/*">
-          <button class="ibtn" id="pickMedia" title="上传图片、视频或语音"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/></svg>媒体</button>
-          <button class="ibtn ai" data-ai="polish">AI 润色</button>
-          <button class="ibtn ai" data-ai="title">AI 起标题</button>
-          <button class="ibtn ai" data-ai="check">AI 自检</button>
-          <button class="send" id="send" disabled>发布</button>
-        </div>
-        <div class="aibox" id="composeAI" hidden></div>
-      </div>
+      <button class="mini-open" id="miniOpen" type="button"><span id="miniHint">打开天窗说亮话。观点不需要被审批。</span></button>
+      <div class="mini-tools"><button type="button" class="ibtn" data-compose="article">长文</button><button type="button" class="ibtn" data-compose="poll">投票</button><button type="button" class="ibtn" id="miniMedia">媒体</button></div>
     </section>
 
     <section id="feed"></section>
@@ -490,13 +677,14 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
     <section class="dm" id="dm" hidden>
       <div class="dm-list">
         <div class="dm-head"><h2>私信</h2><span class="e2e"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>NIP-17 加密 · 中继看不到内容和收发双方</span></div>
-        <form class="newchat" id="newChat"><input id="newChatIn" placeholder="对方的 npub…" autocomplete="off"><button>新对话</button></form>
+        <form class="newchat" id="newChat"><input id="newChatIn" placeholder="对方的 npub…" autocomplete="off"><button type="button" class="icon-btn" id="newChatScan" title="扫码">⌗</button><button>新对话</button></form>
         <button class="link-btn" id="ngToggle" type="button">＋ 新建加密群聊</button>
         <form class="newgroup" id="newGroup" hidden>
           <input id="ngName" placeholder="群名，比如：宏观小组" maxlength="40">
           <textarea id="ngMembers" placeholder="成员的 npub，每行一个"></textarea>
           <button class="solid">创建群聊</button>
         </form>
+        <div class="dm-search"><input id="dmSearch" placeholder="搜索消息" autocomplete="off"></div>
         <div id="convs"></div>
         <div class="room-note" id="roomNote">把你的 npub 发给朋友，对方在天窗里点「新对话」粘贴即可开始加密聊天。</div>
       </div>
@@ -508,6 +696,7 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
           <select id="timer" title="阅后即焚">
             <option value="0">阅后即焚：关</option><option value="3600">1 小时</option><option value="86400">1 天</option><option value="604800">7 天</option>
           </select>
+          <button class="icon-btn" id="grpBtn" hidden>成员</button>
           <button class="icon-btn" id="wire" title="查看中继上存的是什么">显示密文</button>
           <button class="icon-btn" id="safeBtn">安全码</button>
         </div>
@@ -516,12 +705,21 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
           <div class="digits" id="digits"></div>
           <button class="verify" id="verifyBtn">标记为已验证</button>
         </div>
+        <div class="grp-panel" id="grpPanel" hidden>
+          <div class="grp-row"><input id="grpName" placeholder="群名" maxlength="40"><button class="ghost" id="grpRename">改名</button></div>
+          <div id="grpMembers"></div>
+          <div class="grp-row"><input id="grpAdd" placeholder="拉人：粘贴 npub" autocomplete="off"><button class="ghost" id="grpAddBtn">加入</button></div>
+          <button class="ghost danger" id="grpLeave">退出群聊</button>
+        </div>
         <div class="msgs" id="msgs"><div class="sys">从左侧选择一个对话，或粘贴对方的 npub 开始新对话。</div></div>
+        <div class="reply-bar" id="replyBar" hidden><span id="replyBarText"></span><button type="button" id="replyBarX">×</button></div>
         <form class="composer-dm" id="dmForm">
           <input type="file" id="dmFile" class="hidden-file">
           <button type="button" class="icon-btn att" id="dmAttach" title="发送加密图片或文件"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7L14 4.5a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7.5"/></svg></button>
+          <button type="button" class="icon-btn att" id="dmVoice" title="按住说话"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
           <input id="dmIn" placeholder="加密消息…" autocomplete="off"><button>发送</button>
         </form>
+        <div class="rec-hint" id="recHint" hidden>正在录音… 松开发送，上滑取消</div>
       </div>
     </section>
   </main>
@@ -532,7 +730,7 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
         <span id="meAv2"><span class="avatar" style="background:#0b0d0c">你</span></span>
         <div style="min-width:0;flex:1"><b id="meName2" style="font-size:17px">未登录</b><div class="key" id="meKey2">—</div></div>
       </div>
-      <div class="row-btn" style="justify-content:flex-start;margin-top:12px"><button class="ghost" id="mProfile">个人档案与私钥备份</button><button class="ghost" id="mBookmarks">我的收藏</button><button class="ghost" id="mSettings">设置</button></div>
+      <div class="row-btn" style="justify-content:flex-start;margin-top:12px"><button class="ghost" id="mProfile">个人档案与私钥备份</button><button class="ghost" id="mInvite">邀请朋友</button><button class="ghost" id="mBookmarks">我的收藏</button><button class="ghost" id="mSettings">设置</button></div>
     </div>
     <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="q" placeholder="搜索 · 回车搜全网" enterkeyhint="search" autocomplete="off"></div>
 
@@ -541,6 +739,7 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
       <h3>加一个人</h3>
       <form class="follow-box" id="followForm"><input id="followIn" placeholder="粘贴对方的 npub" autocomplete="off"><button>关注</button></form>
       <p class="foot" style="margin:8px 0 0" id="followCount">你还没有关注任何人。</p>
+      <div id="suggestSide"></div>
     </div>
 
     <div class="box">
@@ -559,18 +758,22 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
     </div>
 
     <div class="box">
+      <div class="eyebrow">正在热议</div>
+      <div class="trend" id="trend" style="margin-top:8px"></div>
+    </div>
+    <div class="box">
+      <div class="eyebrow">标的</div>
+      <div class="trend" id="tickers" style="margin-top:8px"></div>
+    </div>
+
+    <div class="box">
       <div class="eyebrow">网络状态</div>
       <h3>没有单点可封</h3>
       <div class="net" id="net"></div>
       <p class="foot" style="margin:10px 0 0">每条内容都用你的私钥签名，同时写入以上所有中继。任何一个中继下线或删帖，其余中继仍有副本。</p>
     </div>
-
-    <div class="box">
-      <div class="eyebrow">正在热议</div>
-      <div class="trend" id="trend" style="margin-top:8px"></div>
-    </div>
     <div class="lang-row"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><select class="lang-sel" id="langSide" aria-label="Language"></select></div>
-    <p class="foot"><span>天窗</span> 0.4.0 · <span>基于 Nostr 协议</span></p>
+    <p class="foot"><span>天窗</span> 0.5.0 · <span>基于 Nostr 协议</span></p>
   </aside>
 </div>
 
@@ -581,6 +784,71 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
   <button data-tab="dm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>私信<i class="badge-n" id="bDM2" hidden></i></button>
   <button data-tab="me"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/></svg>我</button>
 </nav>
+
+<!-- 发布面板 -->
+<div class="scrim" id="compose" hidden>
+  <div class="sheet compose-sheet" role="dialog" aria-labelledby="cTitleH">
+    <div class="c-top">
+      <div class="modes" id="modes">
+        <button class="on" data-mode="short">短帖</button>
+        <button data-mode="article">长文</button>
+        <button data-mode="poll">投票</button>
+      </div>
+      <div class="c-top-r"><span class="count" id="cCount">0</span><button class="ghost" id="cPreviewBtn" type="button" hidden>预览</button><button class="ghost" id="composeClose" type="button">关闭</button></div>
+    </div>
+    <div class="c-body">
+      <div class="c-edit" id="cEdit">
+        <input id="title" placeholder="长文标题" hidden>
+        <div class="md-tools" id="mdTools" hidden>
+          <button type="button" data-md="bold" title="粗体"><b>B</b></button><button type="button" data-md="italic" title="斜体"><i>I</i></button><button type="button" data-md="h2" title="标题">H</button><button type="button" data-md="quote" title="引用">❝</button><button type="button" data-md="ul" title="列表">≡</button><button type="button" data-md="link" title="链接">🔗</button><button type="button" data-md="table" title="表格">⊞</button><button type="button" data-md="code" title="代码">&lt;/&gt;</button><button type="button" id="mdImage" title="插入图片">▣</button>
+        </div>
+        <textarea id="body" placeholder="打开天窗说亮话。观点不需要被审批。输入 @ 可以提到别人，输入 $ 可以标记标的。"></textarea>
+        <div class="mention-box" id="mentionBox" hidden></div>
+        <div class="poll-box" id="pollBox" hidden>
+          <input class="poll-opt" placeholder="选项 1" maxlength="60"><input class="poll-opt" placeholder="选项 2" maxlength="60"><input class="poll-opt" placeholder="选项 3（可选）" maxlength="60"><input class="poll-opt" placeholder="选项 4（可选）" maxlength="60">
+          <label class="poll-dur">截止<select id="pollDur"><option value="86400">1 天</option><option value="259200">3 天</option><option value="604800" selected>7 天</option></select></label>
+        </div>
+        <div class="quote-box" id="quoteBox" hidden></div>
+        <div class="media-prev" id="mediaPrev"></div>
+        <div class="uploading" id="upState" hidden></div>
+        <div class="sugg" id="sugg"></div>
+      </div>
+      <div class="c-preview" id="cPreview" hidden></div>
+    </div>
+    <div class="disclose">
+      <span>利益披露</span>
+      <select id="holding">
+        <option value="none">未持有相关标的</option>
+        <option value="long">持有多头头寸</option>
+        <option value="short">持有空头头寸</option>
+        <option value="paid">含商业推广</option>
+      </select>
+    </div>
+    <div class="ctools">
+      <input type="file" id="fMedia" class="hidden-file" accept="video/*,audio/*,image/*">
+      <button class="ibtn" id="pickMedia" title="上传图片、视频或语音"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/></svg>媒体</button>
+      <button class="ibtn ai" data-ai="polish">AI 润色</button>
+      <button class="ibtn ai" data-ai="title">AI 起标题</button>
+      <button class="ibtn ai" data-ai="check">AI 自检</button>
+      <button class="send" id="send" disabled>发布</button>
+    </div>
+    <div class="aibox" id="composeAI" hidden></div>
+  </div>
+</div>
+
+<!-- 阅读模式 -->
+<div class="reader" id="reader" hidden>
+  <div class="r-progress" id="rProgress"></div>
+  <div class="r-top"><button class="ghost" id="readerClose">‹ 返回</button><span class="r-meta" id="rMeta"></span><button class="ghost" id="rTocBtn">目录</button></div>
+  <div class="r-wrap"><nav class="r-toc" id="rToc" hidden></nav><article class="r-body" id="rBody"></article></div>
+</div>
+
+<!-- 图片查看器 -->
+<div class="lightbox" id="lightbox" hidden>
+  <button class="lb-x" id="lbClose" aria-label="关闭">×</button>
+  <div class="lb-track" id="lbTrack"></div>
+  <div class="lb-dots" id="lbDots"></div>
+</div>
 
 <!-- 首次启动：创建或导入身份 -->
 <div class="scrim" id="onboard" hidden>
@@ -612,6 +880,55 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
   </div>
 </div>
 
+<!-- 新用户引导：三步 -->
+<div class="scrim" id="guide" hidden>
+  <div class="sheet" role="dialog" aria-labelledby="gTitle">
+    <div class="steps" id="gSteps"><span class="on">1</span><i></i><span>2</span><i></i><span>3</span></div>
+    <div id="gStep1">
+      <h2 id="gTitle">第 1 步 · 备份私钥</h2>
+      <p class="hint">这是你账号的唯一凭证。丢了没人能帮你找回，泄露了别人就能冒充你。抄在纸上或存进密码管理器。</p>
+      <div class="copy-row"><div class="mono" id="gNsec">••••••••••••••••••••••••••••••••</div><button class="ghost" id="gShow">显示</button></div>
+      <label class="chk"><input type="checkbox" id="gChk"> 我已经把私钥备份到安全的地方</label>
+      <div class="row-btn"><button class="solid" id="gNext1" disabled>下一步</button></div>
+    </div>
+    <div id="gStep2" hidden>
+      <h2>第 2 步 · 关注几个人</h2>
+      <p class="hint">关注之后，首页马上就有内容。这些是最近在天窗上活跃的账号。</p>
+      <div class="sugg-list" id="gSugg"><div class="hint">正在从中继查找活跃账号…</div></div>
+      <div class="row-btn"><button class="ghost" id="gSkip2">跳过</button><button class="solid" id="gNext2">下一步</button></div>
+    </div>
+    <div id="gStep3" hidden>
+      <h2>第 3 步 · 邀请朋友</h2>
+      <p class="hint">让朋友用天窗扫这个二维码，就能直接关注你、给你发加密私信。</p>
+      <div class="qr-wrap" id="gQr"></div>
+      <div class="copy-row"><div class="mono" id="gNpub"></div><button class="ghost" id="gCopy">复制</button></div>
+      <div class="row-btn"><button class="solid" id="gDone">开始使用</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- 邀请 / 扫码 -->
+<div class="scrim" id="invite" hidden>
+  <div class="sheet" role="dialog" aria-labelledby="ivTitle">
+    <h2 id="ivTitle">邀请朋友</h2>
+    <p class="hint">朋友用天窗扫码即可关注你。你也可以扫对方的码。</p>
+    <div class="qr-wrap" id="ivQr"></div>
+    <div class="copy-row"><div class="mono" id="ivNpub"></div><button class="ghost" id="ivCopy">复制</button></div>
+    <div class="copy-row"><div class="mono" id="ivLink"></div><button class="ghost" id="ivCopyLink">复制链接</button></div>
+    <p class="hint">这个链接打开就是天窗网页版，并自动关注你。</p>
+    <div class="row-btn" style="justify-content:space-between"><button class="ghost" id="ivScan">扫对方的码</button><button class="ghost close" id="ivClose">完成</button></div>
+  </div>
+</div>
+<div class="scrim" id="scan" hidden>
+  <div class="sheet" role="dialog" aria-label="扫码">
+    <h2>扫码</h2>
+    <div class="scan-wrap"><video id="scanVideo" playsinline muted></video><canvas id="scanCanvas" hidden></canvas><div class="scan-frame"></div></div>
+    <p class="hint" id="scanHint">对准对方的天窗二维码。</p>
+    <div class="row-btn"><button class="ghost" id="scanFile">从相册选图</button><button class="ghost" id="scanClose">取消</button></div>
+    <input type="file" id="scanInput" class="hidden-file" accept="image/*">
+  </div>
+</div>
+
 <!-- 锁屏 -->
 <div class="scrim" id="lock" hidden>
   <div class="sheet" role="dialog" aria-labelledby="lockTitle">
@@ -625,13 +942,16 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
   </div>
 </div>
 
-<!-- 个人主页 / 帖子详情 -->
+<!-- 个人主页 / 帖子详情 / 话题页 / 标的页 -->
 <div class="scrim" id="panel" hidden>
   <div class="sheet wide" role="dialog" aria-label="详情">
-    <div class="panel-top"><button class="ghost" id="panelClose">关闭</button></div>
+    <div class="panel-top"><button class="ghost" id="panelBack" hidden>‹ 返回</button><span class="grow"></span><button class="ghost" id="panelClose">关闭</button></div>
     <div id="panelBody"></div>
   </div>
 </div>
+
+<!-- 长按 / 更多菜单 -->
+<div class="ctx" id="ctx" hidden></div>
 
 <!-- 个人档案 / 备份私钥 -->
 <div class="scrim" id="profile" hidden>
@@ -671,6 +991,9 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
     <p class="hint" id="notifHint">打开 app 时会实时提醒新回复、点赞、关注和私信，并在图标上显示未读数。</p>
     <div class="row-btn" style="justify-content:flex-start"><button class="ghost" id="notifBtn">开启系统通知与图标角标</button></div>
     <hr>
+    <div class="fl">私信</div>
+    <label class="chk"><input type="checkbox" id="optReceipts" checked> 发送已读回执（对方能看到你已读）</label>
+    <hr>
     <div class="fl">屏蔽名单</div>
     <div class="mute-list" id="muteList"></div>
     <hr>
@@ -690,13 +1013,17 @@ a.mention:hover,a.tag:hover{text-decoration:underline}
     <div class="seg" id="themeSeg"><button data-th="">跟随系统</button><button data-th="light">浅色</button><button data-th="dark">深色</button></div>
     <hr>
     <button class="ghost" id="logout" style="justify-self:start;color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent)">退出账号（从本机删除私钥）</button>
-    <p class="hint"><span>天窗</span> 0.4.0 · <span>代码指纹</span> <span class="mono-in">bd59 c8bf 0597 50c7</span><br><span>指纹和 GitHub 仓库里 FINGERPRINT.txt 一致，说明你运行的代码没被替换。</span></p>
+    <p class="hint"><span>天窗</span> 0.5.0 · <span>代码指纹</span> <span class="mono-in">2373 4681 36bb f0ec</span><br><span>指纹和 GitHub 仓库里 FINGERPRINT.txt 一致，说明你运行的代码没被替换。</span></p>
     <button class="ghost close" id="closeSettings">完成</button>
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
 
 <script src="vendor/nostr.bundle.js" integrity="sha384-7QhkjSj3gv2n85FuieRm3v1PhqM4Ux9EELcYHVSkMiCw+Y6DMhCNnHpkPHRjYmcN"></script>
-<script src="vendor/i18n.js" integrity="sha384-sOOiLmayQY5noIWtgSCGc0XqNggwMYtNli0Z6dx6H6ncAnUtwjw4mWmMYuWr+omC"></script>
-<script src="app.js" integrity="sha384-jXGHkxGgqGU0Hac3PDDqpAFptXD+xfuyWQg0S93pmDzYrwK3eDD+HEx/RKs2eWyZ"></script>
+<script src="vendor/marked.min.js" integrity="sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+"></script>
+<script src="vendor/purify.min.js" integrity="sha384-JEyTNhjM6R1ElGoJns4U2Ln4ofPcqzSsynQkmEc/KGy6336qAZl70tDLufbkla+3"></script>
+<script src="vendor/qrcode.js" integrity="sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k"></script>
+<script src="vendor/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx"></script>
+<script src="vendor/i18n.js" integrity="sha384-PWrUUdiqY8F/MZOSw4ik+Rx4uIPo96gEEuZ7jk2jA1uvPj0kr5kbQ5daYeKAf1wY"></script>
+<script src="app.js" integrity="sha384-Cag9uyKyhmxOOg0E/WJ2dJn16KBoqkh1Oc/ShMIanlYQD5d+LGAs6rUxYoL94eaa"></script>
 </body></html>
