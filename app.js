@@ -38,7 +38,7 @@ const APP = () => tr("天窗");
 const NOTIF_VERB = { like: "{0} 赞了你的帖子", reply: "{0} 回复了你", mention: "{0} 提到了你", quote: "{0} 引用了你的帖子", repost: "{0} 转发了你的帖子", follow: "{0} 关注了你" };
 const fileLabel = (f) => (f.mime.startsWith("image/") ? tr("〔图片〕") : f.mime.startsWith("video/") ? tr("〔视频〕") : tr("〔文件〕"));
 /* 静态界面文字：记住中文原文，切换语言时整页重译；用户内容区域一律跳过 */
-const SKIP_I18N = "script,style,#feed,#msgs,#convs,#panelBody,#chat,#net,#trend,#muteList,#quoteBox,#mentionBox,#composeAI,#toast,.mono,[data-noi18n],#thName,#meName,#meName2,#upState,#pfPicState,.lang-sel,#sugg,#suggestSide,#gSugg,#tickers,#rBody,#rToc,#ctx,#grpMembers,#replyBarText,#cPreview,#lbTrack,#gNsec,#gNpub,#ivNpub,#ivLink,#gQr,#ivQr,#cCount";
+const SKIP_I18N = "script,style,#feed,#msgs,#convs,#panelBody,#chat,#net,#trend,#muteList,#quoteBox,#mentionBox,#composeAI,#toast,.mono,[data-noi18n],#thName,#meName,#meName2,#upState,#pfPicState,.lang-sel,#sugg,#suggestSide,#gSugg,#tickers,#rBody,#rToc,#ctx,#grpMembers,#replyBarText,#cPreview,#lbTrack,#gNsec,#gNpub,#ivNpub,#ivLink,#gQr,#ivQr,#cCount,#ciName,#ciKey,#thSub,#ciEnc,#digits,#safeQr,#ciAv,#thAv";
 const CJK_RE = /[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]/;
 const textSrc = new WeakMap();
 function translateStatic(root = document.body) {
@@ -224,7 +224,7 @@ const cache = {
   },
   put(ev) { if (!this.db) return; this.pending.set(ev.id, ev); clearTimeout(this.timer); this.timer = setTimeout(() => this.flush(), 1500); },
   flush() { if (!this.db || !this.pending.size) return; try { const st = this.db.transaction("ev", "readwrite").objectStore("ev"); for (const e of this.pending.values()) st.put(e); } catch (e) {} this.pending.clear(); },
-  del(id) { if (!this.db) return; try { this.db.transaction("ev", "readwrite").objectStore("ev").delete(id); } catch (e) {} },
+  del(id) { this.pending.delete(id); if (!this.db) return; try { this.db.transaction("ev", "readwrite").objectStore("ev").delete(id); } catch (e) {} },
   prune(all) {
     if (!this.db || all.length <= 6000) return;
     try { const st = this.db.transaction("ev", "readwrite").objectStore("ev"); all.slice().sort((a, b) => a.created_at - b.created_at).slice(0, all.length - 5000).forEach((e) => st.delete(e.id)); } catch (e) {}
@@ -277,6 +277,9 @@ async function start() {
   readState.__init = init;
   try { hiddenConvs = new Set(JSON.parse(ls.get("tc-hidden-" + pk8(), "[]"))); } catch (e) {}
   loadOutbox();
+  try { convTimers = JSON.parse(ls.get("tc-timer-" + pk8(), "{}")) || {}; } catch (e) { convTimers = {}; }
+  $("#optFs").value = ls.get("tc-fs", "1");
+  await rkLoad();
   $("#fWot").checked = ls.get("tc-wot", "0") === "1";
   $("#optReceipts").checked = ls.get("tc-receipts", "1") === "1";
   renderMe();
@@ -285,9 +288,10 @@ async function start() {
   cached.sort((a, b) => a.created_at - b.created_at).forEach((e) => ingest(e, true));
   cache.prune(cached);
   booting = false;
-  probeRelays();
+  probeRelays().then(() => rkPublishBundle(false));
   subscribeMain();
   setInterval(refreshRelayState, 5000);
+  setInterval(() => rkPublishBundle(false), 6 * 3600 * 1000);
   setInterval(flushProfiles, 1200);
   setInterval(flushNeedEvents, 1500);
   render(); updateBadges();
@@ -421,6 +425,7 @@ async function openScan(onResult) {
 }
 function closeScan() { cancelAnimationFrame(scanRAF); if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; } $("#scanVideo").srcObject = null; $("#scan").hidden = true; }
 function handleScanned(text) {
+  if (scanDone && scanDone.raw) { closeScan(); const cb = scanDone; scanDone = null; cb(text); return; }
   let p = null;
   try { const m = String(text).match(/(npub1[02-9ac-hj-np-z]{58}|nprofile1[02-9ac-hj-np-z]+)/); if (m) p = decodeNpub(m[1]); } catch (e) {}
   closeScan();
@@ -429,7 +434,7 @@ function handleScanned(text) {
   const cb = scanDone; scanDone = null; if (cb) cb(p);
 }
 $("#ivScan").onclick = () => { $("#invite").hidden = true; openScan(async (p) => { needProfile(p); await setFollow(p, true); openUser(p); }); };
-$("#newChatScan").onclick = () => openScan((p) => { openConv(p, [p]); renderConvs(); renderThread(); });
+$("#newChatScan").onclick = () => { $("#newConv").hidden = true; openScan((p) => { openConv(p, [p]); renderConvs(); renderThread(); }); };
 $("#scanClose").onclick = closeScan;
 $("#scanFile").onclick = () => $("#scanInput").click();
 $("#scanInput").onchange = async (e) => {
@@ -1415,6 +1420,7 @@ document.addEventListener("click", async (e) => {
   else if (d.aitoggle) { openAI.has(d.aitoggle) ? openAI.delete(d.aitoggle) : openAI.add(d.aitoggle); render(); renderPanel(); if (readerEv && readerEv.id === d.aitoggle) openReader(readerEv); }
   else if (d.ctx) { const r = t.getBoundingClientRect(); openCtx(d.ctx, r.left, r.bottom + 4); }
   else if (d.ctxact) ctxAction(d.ctxact, d.id);
+  else if (d.pick !== undefined) { const f = ctxPick; ctxPick = null; closeCtx(); if (f) f(d.pick); }
   else if (d.vote) {
     const [pid, opt] = d.vote.split("|"); const ev = events.get(pid); if (!ev) return;
     const { ok } = await publish({ kind: 1018, created_at: now(), content: "", tags: [["e", pid], ["response", opt], ["p", ev.pubkey]] });
@@ -1469,6 +1475,169 @@ function renderMuteList() {
   box.innerHTML = mutes.size ? [...mutes].map((p) => `<div><span>${esc(nameOf(p))} <span class="key">${short(p)}</span></span><button data-unmute="${p}">${tr("取消屏蔽")}</button></div>`).join("") : `<p class="hint">${tr("没有屏蔽任何人。在帖子的「更多」里可以屏蔽。名单加密保存在中继上，只有你能看到。")}</p>`;
 }
 
+/* ======================= 前向保密会话（X3DH + 双棘轮，按 Signal 协议规范实现） =======================
+   密钥协商：以 Nostr 身份密钥为 IK，每台设备发布一把签名预共享密钥（kind 30444，d = 设备号）。
+   消息层：每条消息一把新密钥（对称棘轮），每来回一次换一次 DH（DH 棘轮）。
+   传输层不变：棘轮密文仍放进 NIP-17 礼物包装里，中继照旧看不到收发双方。 */
+const RK_KIND = 30444, RK_MAX_SKIP = 200, RK_MAX_SKIPPED = 400, RK_SPK_ROTATE = 7 * 86400, RK_SPK_KEEP = 30 * 86400, RK_BUNDLE_TTL = 30 * 86400;
+const u8 = (s) => new TextEncoder().encode(s);
+const cat = (...xs) => { const n = xs.reduce((a, x) => a + x.length, 0), o = new Uint8Array(n); let i = 0; for (const x of xs) { o.set(x, i); i += x.length; } return o; };
+const DH = (secret, pub) => nip44.getConversationKey(secret, pub);
+async function hkdf(ikm, salt, info, len) {
+  const k = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info: u8(info) }, k, len * 8));
+}
+async function hmac(key, data) {
+  const k = await crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return new Uint8Array(await crypto.subtle.sign("HMAC", k, data));
+}
+async function kdfRK(rk, dh) { const o = await hkdf(dh, rk, "tc-ratchet-rk", 64); return [o.slice(0, 32), o.slice(32)]; }
+async function kdfCK(ck) { return [await hmac(ck, new Uint8Array([2])), await hmac(ck, new Uint8Array([1]))]; }   // [ck', mk]
+async function aeadEnc(mk, plain, ad) {
+  const o = await hkdf(mk, new Uint8Array(32), "tc-ratchet-msg", 44);
+  const k = await crypto.subtle.importKey("raw", o.slice(0, 32), "AES-GCM", false, ["encrypt"]);
+  return new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: o.slice(32), additionalData: ad }, k, plain));
+}
+async function aeadDec(mk, ct, ad) {
+  const o = await hkdf(mk, new Uint8Array(32), "tc-ratchet-msg", 44);
+  const k = await crypto.subtle.importKey("raw", o.slice(0, 32), "AES-GCM", false, ["decrypt"]);
+  return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: o.slice(32), additionalData: ad }, k, ct));
+}
+const newKP = () => { const s = generateSecretKey(); return { sk: toHex(s), pk: getPublicKey(s) }; };
+
+/* ---------- 本机状态：用身份私钥派生的密钥加密后存本机 ---------- */
+let rkStore = null;   // { dev, spks: {pk: {sk, at}}, sessions: {peer:dev -> state}, bundleAt }
+const rkKey = () => "tc-fs-" + pk8();
+async function rkCipherKey() { return crypto.subtle.importKey("raw", await hkdf(sk, new Uint8Array(32), "tc-session-store", 32), "AES-GCM", false, ["encrypt", "decrypt"]); }
+async function rkLoad() {
+  rkStore = null;
+  try {
+    const raw = ls.get(rkKey()); if (raw) { const [ivb, ctb] = raw.split("."); const k = await rkCipherKey(); rkStore = JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(ivb) }, k, unb64(ctb)))); }
+  } catch (e) { rkStore = null; }
+  if (!rkStore) rkStore = { dev: toHex(crypto.getRandomValues(new Uint8Array(4))), spks: {}, sessions: {}, bundleAt: 0 };
+  return rkStore;
+}
+let rkSaving = Promise.resolve();
+function rkSave() {
+  rkSaving = rkSaving.then(async () => { try { const k = await rkCipherKey(), iv = crypto.getRandomValues(new Uint8Array(12)); ls.set(rkKey(), b64(iv) + "." + b64(new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, k, u8(JSON.stringify(rkStore)))))); } catch (e) {} });
+  return rkSaving;
+}
+/* ---------- 预共享密钥的发布与轮换 ---------- */
+function rkCurrentSpk() { const l = Object.entries(rkStore.spks).sort((a, b) => b[1].at - a[1].at); return l[0] ? { pk: l[0][0], ...l[0][1] } : null; }
+async function rkPublishBundle(force) {
+  if (!rkStore || !pool || ls.get("tc-fs", "1") !== "1") return;
+  let cur = rkCurrentSpk(), t = now();
+  if (!cur || t - cur.at > RK_SPK_ROTATE) { const kp = newKP(); rkStore.spks[kp.pk] = { sk: kp.sk, at: t }; cur = { pk: kp.pk, ...rkStore.spks[kp.pk] }; force = true; }
+  for (const [p, v] of Object.entries(rkStore.spks)) if (t - v.at > RK_SPK_KEEP && p !== cur.pk) delete rkStore.spks[p];
+  if (force || t - rkStore.bundleAt > 86400) {
+    const { ok } = await publish({ kind: RK_KIND, created_at: t, content: "", tags: [["d", rkStore.dev], ["spk", cur.pk], ["v", "1"], ["client", APP()]] });
+    if (ok) rkStore.bundleAt = t;
+  }
+  rkSave();
+}
+const bundleCache = new Map();   // peer -> { at, list: [{dev, spk, at}] }
+async function rkBundlesOf(p) {
+  const c = bundleCache.get(p); if (c && now() - c.at < 600) return c.list;
+  let list = [];
+  try {
+    const evs = await pool.querySync(relays, { kinds: [RK_KIND], authors: [p] }, { maxWait: 3500 });
+    const byDev = new Map();
+    for (const ev of evs) { const dev = tag(ev, "d"), spk = tag(ev, "spk"); if (!isHex(dev, 8) || !isHex(spk, 64) || now() - ev.created_at > RK_BUNDLE_TTL) continue; if (!byDev.has(dev) || byDev.get(dev).at < ev.created_at) byDev.set(dev, { dev, spk, at: ev.created_at }); }
+    list = [...byDev.values()];
+  } catch (e) {}
+  bundleCache.set(p, { at: now(), list }); return list;
+}
+/* ---------- 会话 ---------- */
+const sessKey = (peer, dev) => peer + ":" + dev;
+async function rkInitSession(peer, b) {   // 我是发起方
+  const ek = newKP(), dhs = newKP();
+  const skBytes = await hkdf(cat(new Uint8Array(32).fill(0xff), DH(sk, b.spk), DH(fromHex(ek.sk), peer), DH(fromHex(ek.sk), b.spk)), new Uint8Array(32), "tc-x3dh", 32);
+  const [rk, cks] = await kdfRK(skBytes, DH(fromHex(dhs.sk), b.spk));
+  return { dhs, dhr: b.spk, rk: toHex(rk), cks: toHex(cks), ckr: null, ns: 0, nr: 0, pn: 0, skipped: {}, init: { ek: ek.pk, spk: b.spk }, createdAt: now(), lastAt: 0, unacked: [] };
+}
+async function rkAcceptSession(peer, h) {   // 对方发起，h.ek / h.spk
+  const spk = rkStore.spks[h.spk]; if (!spk) throw new Error("unknown spk");
+  const skBytes = await hkdf(cat(new Uint8Array(32).fill(0xff), DH(fromHex(spk.sk), peer), DH(sk, h.ek), DH(fromHex(spk.sk), h.ek)), new Uint8Array(32), "tc-x3dh", 32);
+  return { dhs: { sk: spk.sk, pk: h.spk }, dhr: null, rk: toHex(skBytes), cks: null, ckr: null, ns: 0, nr: 0, pn: 0, skipped: {}, init: null, createdAt: now(), lastAt: 0, unacked: [] };
+}
+async function rkEncrypt(s, plainBytes, peer) {
+  const [ck, mk] = await kdfCK(fromHex(s.cks)); s.cks = toHex(ck);
+  const h = { dh: s.dhs.pk, pn: s.pn, n: s.ns, dev: rkStore.dev }; if (s.init) { h.ek = s.init.ek; h.spk = s.init.spk; }
+  s.ns++;
+  const ad = u8(JSON.stringify(h) + pk + peer);
+  return { h, c: b64(await aeadEnc(mk, plainBytes, ad)) };
+}
+async function rkSkip(s, until) {
+  if (!s.ckr) return;
+  if (s.nr + RK_MAX_SKIP < until) throw new Error("too many skipped");
+  while (s.nr < until) { const [ck, mk] = await kdfCK(fromHex(s.ckr)); s.ckr = toHex(ck); s.skipped[s.dhr + ":" + s.nr] = toHex(mk); s.nr++; }
+  const ks = Object.keys(s.skipped); if (ks.length > RK_MAX_SKIPPED) ks.slice(0, ks.length - RK_MAX_SKIPPED).forEach((k) => delete s.skipped[k]);
+}
+async function rkDHRatchet(s, h) {
+  s.pn = s.ns; s.ns = 0; s.nr = 0; s.dhr = h.dh;
+  let r; [r, s.ckr] = (await kdfRK(fromHex(s.rk), DH(fromHex(s.dhs.sk), s.dhr))).map(toHex); s.rk = r;
+  s.dhs = newKP();
+  [r, s.cks] = (await kdfRK(fromHex(s.rk), DH(fromHex(s.dhs.sk), s.dhr))).map(toHex); s.rk = r;
+}
+async function rkDecrypt(s, msg, peer, from) {
+  const h = msg.h, ad = u8(JSON.stringify(h) + from + peer), ct = unb64(msg.c);
+  const sk1 = s.skipped[h.dh + ":" + h.n];
+  if (sk1) { const out = await aeadDec(fromHex(sk1), ct, ad); delete s.skipped[h.dh + ":" + h.n]; return out; }
+  if (h.dh !== s.dhr) { await rkSkip(s, h.pn); await rkDHRatchet(s, h); }
+  await rkSkip(s, h.n);
+  const [ck, mk] = await kdfCK(fromHex(s.ckr)); const out = await aeadDec(mk, ct, ad); s.ckr = toHex(ck); s.nr++;
+  return out;
+}
+/* ---------- 对外接口：加密一条内层事件给某人（返回每台设备一份外层 rumor），解密一条 ---------- */
+const rkPeerSupport = new Map();   // peer -> 是否发布过预共享密钥
+async function rkWrapFor(peer, inner) {
+  if (!rkStore || ls.get("tc-fs", "1") !== "1") return null;
+  const bundles = await rkBundlesOf(peer);
+  const mine = Object.keys(rkStore.sessions).filter((k) => k.startsWith(peer + ":")).map((k) => k.slice(65));
+  const devs = new Set([...bundles.map((b) => b.dev), ...mine]);
+  if (!devs.size) { rkPeerSupport.set(peer, false); return null; }
+  rkPeerSupport.set(peer, true);
+  const plain = u8(JSON.stringify(inner)), out = [];
+  for (const dev of devs) {
+    const k = sessKey(peer, dev); let s = rkStore.sessions[k];
+    if (!s) { const b = bundles.find((x) => x.dev === dev); if (!b) continue; s = rkStore.sessions[k] = await rkInitSession(peer, b); }
+    if (s.init) { s.unacked.push(inner); if (s.unacked.length > 50) s.unacked.shift(); }
+    const body = await rkEncrypt(s, plain, peer);
+    out.push({ kind: 14, created_at: inner.created_at, tags: [["p", peer], ["tc-e2e", "ratchet"]], content: JSON.stringify(body), pubkey: pk });
+  }
+  rkSave();
+  return out;
+}
+async function rkUnwrap(outer) {
+  const peer = outer.pubkey; let msg; try { msg = JSON.parse(outer.content); } catch (e) { throw new Error("bad body"); }
+  const h = msg.h || {}; if (!isHex(h.dh, 64) || !isHex(h.dev, 8)) throw new Error("bad header");
+  const k = sessKey(peer, h.dev); let s = rkStore.sessions[k];
+  const parse = (bytes) => { const r = JSON.parse(new TextDecoder().decode(bytes)); if (r.pubkey !== peer || getEventHash(r) !== r.id) throw new Error("inner mismatch"); return r; };
+  if (h.ek) {   // 对方发起（或重建）会话
+    const cand = await rkAcceptSession(peer, h);
+    const inner = parse(await rkDecrypt(cand, msg, pk, peer));
+    const takeTheirs = !s || (s.init ? peer < pk : inner.created_at > s.lastAt);
+    if (takeTheirs) {
+      const resend = s && s.init ? s.unacked : [];
+      cand.lastAt = inner.created_at; rkStore.sessions[k] = cand; rkSave();
+      if (resend.length) setTimeout(() => rkResend(peer, resend), 500);
+      return inner;
+    }
+    throw new Error("stale init");
+  }
+  if (!s) throw new Error("no session");
+  const inner = parse(await rkDecrypt(s, msg, pk, peer));
+  s.lastAt = Math.max(s.lastAt, inner.created_at); if (s.init) { s.init = null; s.unacked = []; }
+  rkSave();
+  return inner;
+}
+async function rkResend(peer, inners) {
+  const c = convs.get(peer); if (!c) return;
+  for (const inner of inners) { const outs = await rkWrapFor(peer, inner); if (!outs) continue; for (const o of outs) { const w = giftWrap(o, peer, 0); Promise.allSettled(pool.publish([...new Set([...(await dmRelaysOf(peer)), ...relays])], w)); } }
+}
+function rkResetSession(peer) { if (!rkStore) return; for (const k of Object.keys(rkStore.sessions)) if (k.startsWith(peer + ":")) delete rkStore.sessions[k]; bundleCache.delete(peer); rkSave(); }
+const rkHasSession = (peer) => !!rkStore && Object.keys(rkStore.sessions).some((k) => k.startsWith(peer + ":"));
+
 /* ======================= 加密私信与群聊（NIP-17） ======================= */
 function unwrapGift(wrap) {
   const seal = JSON.parse(nip44.decrypt(wrap.content, nip44.getConversationKey(sk, wrap.pubkey)));
@@ -1481,19 +1650,36 @@ function unwrapGift(wrap) {
   return rumor;
 }
 const randPast = () => now() - Math.floor(Math.random() * 172800);
-function giftWrap(rumor, recipient, expSec) {
+function giftWrap(rumor, recipient, expSec, extraTags = []) {
   const seal = finalizeEvent({ kind: 13, created_at: randPast(), tags: [], content: nip44.encrypt(JSON.stringify(rumor), nip44.getConversationKey(sk, recipient)) }, sk);
-  const rk = generateSecretKey(), tags = [["p", recipient]];
+  const rk = generateSecretKey(), tags = [["p", recipient], ...extraTags];
   if (expSec) tags.push(["expiration", String(now() + expSec)]);
   return finalizeEvent({ kind: 1059, created_at: randPast(), tags, content: nip44.encrypt(JSON.stringify(seal), nip44.getConversationKey(rk, recipient)) }, rk);
 }
 const convKeyOf = (members) => (members.length <= 1 ? members[0] || pk : "g:" + [...members, pk].sort().join(","));
 const seenWraps = new Set();
+let rkQueue = Promise.resolve();
 function onGiftWrap(wrap, fromCache) {
   if (seenWraps.has(wrap.id)) return; seenWraps.add(wrap.id);
   const exp = Number(tag(wrap, "expiration")) || 0;
   if (exp && exp < now()) { cache.del(wrap.id); return; }
   let r; try { r = unwrapGift(wrap); } catch (e) { return; }
+  if (r.kind === 14 && tag(r, "tc-e2e") === "ratchet") {
+    // 棘轮密文：按到达顺序逐条解密；解出的内层事件用自己的密钥重新包装后存本地，密文本身不留
+    cache.del(wrap.id);
+    if (fromCache) return;
+    rkQueue = rkQueue.then(async () => {
+      let inner;
+      try { inner = await rkUnwrap(r); }
+      catch (e) { if (/stale init/.test(String(e.message))) return; const c = ensureConv(r.pubkey, [r.pubkey]); c.undecryptable = (c.undecryptable || 0) + 1; c.lastErr = String(e.message || e); schedule(); return; }
+      const self = giftWrap(inner, pk, exp, [["tc-fs", "1"]]); seenWraps.add(self.id); cache.put(self);
+      handleRumor(inner, { wire: wrap.content, exp, fs: true, wid: self.id }, false);
+    }).catch(() => {});
+    return;
+  }
+  handleRumor(r, { wire: wrap.content, exp, fs: tag(wrap, "tc-fs") === "1", wid: wrap.id }, fromCache);
+}
+function handleRumor(r, { wire, exp, fs, wid }, fromCache) {
   const parts = new Set([r.pubkey, ...r.tags.filter((t) => t[0] === "p" && isHex(t[1], 64)).map((t) => t[1])]);
   parts.delete(pk);
   const members = [...parts].sort();
@@ -1508,7 +1694,7 @@ function onGiftWrap(wrap, fromCache) {
     return schedule();
   }
   if (r.kind !== 14 && r.kind !== 15) return;
-  const msg = { id: r.id, me: r.pubkey === pk, from: r.pubkey, at: r.created_at, wire: wrap.content, exp, status: "", replyTo: (r.tags.find((t) => t[0] === "e" && t[3] === "reply") || r.tags.find((t) => t[0] === "e") || [])[1] || null, meta: r.tags.some((t) => t[0] === "tc-meta") };
+  const msg = { id: r.id, me: r.pubkey === pk, from: r.pubkey, at: r.created_at, wire, exp, fs, wid, status: "", replyTo: (r.tags.find((t) => t[0] === "e" && t[3] === "reply") || r.tags.find((t) => t[0] === "e") || [])[1] || null, meta: r.tags.some((t) => t[0] === "tc-meta") };
   if (r.kind === 14) msg.text = String(r.content).slice(0, 20000);
   else {
     msg.file = { url: String(r.content), mime: String(tag(r, "file-type") || "application/octet-stream"), key: tag(r, "decryption-key"), nonce: tag(r, "decryption-nonce"), alg: tag(r, "encryption-algorithm"), name: String(tag(r, "name") || tr("附件")).slice(0, 80), size: Number(tag(r, "size")) || 0, dur: Number(tag(r, "duration")) || 0, voice: r.tags.some((t) => t[0] === "voice") };
@@ -1566,7 +1752,7 @@ async function flushOutbox(manual) {
       const stillTo = left.filter((it) => !it.self);
       if (stillTo.length) o.items = left; else outbox.delete(id);
       const m = convs.get(o.conv)?.msgs.get(id);
-      if (m) { m.status = stillTo.length ? queuedText() : tr("已送达"); if (!stillTo.length) sent++; }
+      if (m) { m.status = stillTo.length ? queuedText() : tr("已送达"); m.st = stillTo.length ? "queued" : "sent"; if (!stillTo.length) sent++; }
     }
   } finally { flushing = false; saveOutbox(); schedule(); }
   if (sent) toast(tr("已重发 {0} 条排队消息", sent));
@@ -1574,49 +1760,61 @@ async function flushOutbox(manual) {
 setInterval(() => flushOutbox(false), 30000);
 window.addEventListener("online", () => setTimeout(() => flushOutbox(true), 1500));
 
+let convTimers = {};
+const convTimerOf = (c) => Number(convTimers[c.key]) || 0;
+const TIMER_LBL = { 0: "", 300: "5m", 3600: "1h", 86400: "1d", 604800: "7d" };
+const timerName = (v) => ({ 0: tr("关"), 300: tr("5 分钟"), 3600: tr("1 小时"), 86400: tr("1 天"), 604800: tr("7 天") })[v] || tr("关");
 async function sendRumor(c, kind, content, extraTags = [], local = {}) {
-  const exp = Number($("#timer").value) || 0;
+  const exp = convTimerOf(c);
   const tags = [...c.members.map((p) => ["p", p]), ...extraTags];
   if (c.group && c.name && !extraTags.some((t) => t[0] === "subject")) tags.push(["subject", c.name]);
   const rumor = { kind, created_at: now(), tags, content, pubkey: pk };
   rumor.id = getEventHash(rumor);
   const isMsg = kind === 14 || kind === 15;
-  const msg = { id: rumor.id, me: true, from: pk, at: rumor.created_at, exp: exp ? now() + exp : 0, status: tr("发送中"), replyTo: (extraTags.find((t) => t[0] === "e") || [])[1] || null, meta: extraTags.some((t) => t[0] === "tc-meta"), ...local };
+  const msg = { id: rumor.id, me: true, from: pk, at: rumor.created_at, exp: exp ? now() + exp : 0, status: tr("发送中"), st: "pending", replyTo: (extraTags.find((t) => t[0] === "e") || [])[1] || null, meta: extraTags.some((t) => t[0] === "tc-meta"), ...local };
   if (isMsg) addMsg(c.key, c.members, msg);
-  let ok = 0; const failed = [];
+  let ok = 0; const failed = []; let fs = false;
   await Promise.all(c.members.filter((p) => p !== pk).map(async (p) => {
-    const w = giftWrap(rumor, p, exp);
-    if (!msg.wire) msg.wire = w.content;
+    // 1 对 1 且对方发布过预共享密钥：走前向保密棘轮（每台设备一份）；否则退回标准 NIP-17
+    let outers = null;
+    if (!c.group) { try { outers = await rkWrapFor(p, rumor); } catch (e) { outers = null; } }
+    const wraps = outers && outers.length ? outers.map((o) => giftWrap(o, p, exp)) : [giftWrap(rumor, p, exp)];
+    if (outers && outers.length) fs = true;
+    if (!msg.wire) msg.wire = wraps[0].content;
     const target = [...new Set([...(await dmRelaysOf(p)), ...relays])];
-    const res = await Promise.allSettled(pool.publish(target, w));
-    if (res.some((x) => x.status === "fulfilled")) ok++; else failed.push({ p, w, target });
+    let any = false; const miss = [];
+    for (const w of wraps) { const res = await Promise.allSettled(pool.publish(target, w)); if (res.some((x) => x.status === "fulfilled")) any = true; else miss.push({ p, w, target }); }
+    if (any) ok++; else failed.push(...miss);
   }));
-  const self = giftWrap(rumor, pk, exp); seenWraps.add(self.id); if (isMsg) cache.put(self);
-  Promise.allSettled(pool.publish(relays, self)).then((res) => {
+  msg.fs = fs;
+  const self = giftWrap(rumor, pk, exp, fs ? [["tc-fs", "1"]] : []); seenWraps.add(self.id); if (isMsg) { cache.put(self); msg.wid = self.id; }
+  // 前向保密模式下自己的副本只存本机，不上中继（否则等于用长期密钥把明文再发一遍）
+  if (!fs) Promise.allSettled(pool.publish(relays, self)).then((res) => {
     // 自己的副本也发不出去（其他设备就同步不到）：一并排队
     if (isMsg && !res.some((x) => x.status === "fulfilled") && outbox.has(rumor.id)) { outbox.get(rumor.id).items.push({ p: pk, w: self, target: relays, self: true }); saveOutbox(); }
   });
   const n = c.members.filter((p) => p !== pk).length;
   if (isMsg && failed.length) {
     outbox.set(rumor.id, { conv: c.key, items: failed }); saveOutbox();
-    msg.status = queuedText();
+    msg.status = queuedText(); msg.st = "queued";
     toast(relaysUp() ? tr("中继暂时未接收，消息已排队，稍后自动重发。") : tr("当前没有连上任何中继，请检查网络或开启 VPN。消息已排队，联网后会自动重发。"));
-  } else msg.status = !n ? tr("已保存") : ok === n ? tr("已送达") : ok ? tr("已送达 {0}/{1} 人", ok, n) : tr("发送失败");
+  } else { msg.status = !n ? tr("已保存") : ok === n ? tr("已送达") : ok ? tr("已送达 {0}/{1} 人", ok, n) : tr("发送失败"); msg.st = !n || ok === n ? "sent" : ok ? "partial" : "failed"; }
   if (isMsg) schedule();
   return ok;
 }
 function openConv(key, members) {
   const c = ensureConv(key, members);
   if (hiddenConvs.has(key)) { hiddenConvs.delete(key); ls.set("tc-hidden-" + pk8(), JSON.stringify([...hiddenConvs])); }
-  curConv = key; members.forEach(needProfile); replyTo = null; $("#replyBar").hidden = true; $("#dm").classList.add("open"); $("#safety").hidden = true; $("#safeBtn").classList.remove("on"); $("#grpPanel").hidden = true;
+  curConv = key; members.forEach(needProfile); replyTo = null; $("#replyBar").hidden = true; $("#dm").classList.add("open"); $("#convInfo").hidden = true;
   return c;
 }
 $("#newChat").onsubmit = (e) => {
   e.preventDefault();
-  try { const p = decodeNpub($("#newChatIn").value); if (p === pk) return toast(tr("不能给自己发私信")); $("#newChatIn").value = ""; openConv(p, [p]); renderConvs(); renderThread(); $("#dmIn").focus(); }
+  try { const p = decodeNpub($("#newChatIn").value); if (p === pk) return toast(tr("不能给自己发私信")); $("#newChatIn").value = ""; $("#newConv").hidden = true; openConv(p, [p]); renderConvs(); renderThread(); $("#dmIn").focus(); }
   catch (err) { toast(tr("没认出这个 npub")); }
 };
-$("#ngToggle").onclick = () => { $("#newGroup").hidden = !$("#newGroup").hidden; if (!$("#newGroup").hidden) $("#ngName").focus(); };
+$("#dmNew").onclick = () => { $("#newConv").hidden = false; $("#newChatIn").focus(); };
+$("#ncClose").onclick = () => ($("#newConv").hidden = true);
 $("#newGroup").onsubmit = (e) => {
   e.preventDefault();
   const raw = $("#ngMembers").value.split(/[\s,，]+/).filter(Boolean), members = new Set();
@@ -1625,25 +1823,104 @@ $("#newGroup").onsubmit = (e) => {
   if (members.size > 20) return toast(tr("群聊最多 20 人"));
   const list = [...members].sort(), key = convKeyOf(list);
   const c = openConv(key, list); c.name = $("#ngName").value.trim().slice(0, 40); c.nameAt = now();
-  $("#ngMembers").value = ""; $("#ngName").value = ""; $("#newGroup").hidden = true;
+  $("#ngMembers").value = ""; $("#ngName").value = ""; $("#newConv").hidden = true;
   renderConvs(); renderThread(); $("#dmIn").focus();
   toast(tr("群聊已创建。发出第一条消息后，成员才会看到这个群。"));
 };
 $("#convs").onclick = (e) => { const b = e.target.closest("[data-conv]"); if (!b) return; const c = convs.get(b.dataset.conv); if (!c) return; openConv(c.key, c.members); renderConvs(); renderThread(); };
 $("#dmBack").onclick = () => $("#dm").classList.remove("open");
-$("#wire").onclick = () => { showWire = !showWire; $("#wire").classList.toggle("on", showWire); $("#wire").textContent = showWire ? tr("隐藏密文") : tr("显示密文"); renderThread(); };
-$("#safeBtn").onclick = () => { $("#safety").hidden = !$("#safety").hidden; $("#safeBtn").classList.toggle("on", !$("#safety").hidden); };
-$("#verifyBtn").onclick = () => { const c = convs.get(curConv); if (!c || c.group) return; const p = c.members[0]; verified.has(p) ? verified.delete(p) : verified.add(p); ls.set("tc-verified", JSON.stringify([...verified])); renderThread(); };
+/* ---------- 对话设置（Signal 式信息页） ---------- */
+const avatarPlain = (p, cls = "avatar") => avatarHTML(p, cls).replace(/ data-user="[0-9a-f]+"/, "");
+const convAvatarPlain = (c) => (c.group ? convAvatar(c) : avatarPlain(c.members[0]));
+const convIsFS = (c) => !c.group && (rkHasSession(c.members[0]) || [...c.msgs.values()].some((m) => m.fs));
+function encLabel(c) { return c.group ? tr("端到端加密 · 群消息逐个加密发给每位成员") : convIsFS(c) ? tr("前向保密 · 双棘轮，每条消息一把新密钥") : tr("端到端加密（NIP-17）"); }
+function openConvInfo(showSafety) {
+  const c = convs.get(curConv); if (!c) return;
+  const p = c.members[0];
+  $("#ciAv").innerHTML = convAvatarPlain(c); $("#ciName").textContent = convTitle(c);
+  $("#ciKey").textContent = c.group ? tr("{0} 人加密群聊", c.members.length + 1) : nip19.npubEncode(p);
+  $("#ciEnc").textContent = encLabel(c); $("#ciEnc").className = convIsFS(c) ? "badge-v" : "badge-u";
+  $("#ciTimer").value = String(convTimerOf(c)); $("#ciTimerLbl").textContent = timerName(convTimerOf(c));
+  $("#ciWireState").textContent = showWire ? tr("开") : tr("关");
+  $("#ciSafety").hidden = c.group; $("#ciReset").hidden = c.group || !convIsFS(c); $("#ciMute").hidden = c.group;
+  $("#ciMembers").hidden = !c.group; $("#ciLeave").hidden = !c.group; $("#ciMembersLbl").textContent = c.group ? tr("{0} 人", c.members.length + 1) : "";
+  if (!c.group) $("#ciSafetyLbl").textContent = verified.has(p) ? tr("✓ 已验证") : tr("当面核对或扫码验证对方身份");
+  $("#safety").hidden = !showSafety; $("#grpPanel").hidden = true;
+  if (showSafety) renderSafety(c);
+  $("#convInfo").hidden = false;
+}
+async function renderSafety(c) {
+  const p = c.members[0], v = verified.has(p);
+  const digits = await safetyNumber(pk, p); if (curConv !== c.key) return;
+  $("#digits").innerHTML = digits.map((d) => `<span>${d}</span>`).join("");
+  $("#safeQr").innerHTML = qrSVG("tcsafe:" + digits.join(""));
+  $("#verifyBtn").textContent = v ? tr("已验证 ✓") : tr("标记为已验证"); $("#verifyBtn").classList.toggle("done", v);
+}
+$("#thId").onclick = () => openConvInfo(false);
+$("#thMore").onclick = () => openConvInfo(false);
+$("#ciClose").onclick = () => ($("#convInfo").hidden = true);
+$("#ciSafety").onclick = () => { const c = convs.get(curConv); if (!c) return; $("#safety").hidden = !$("#safety").hidden; if (!$("#safety").hidden) renderSafety(c); };
+$("#ciTimer").onchange = () => { const c = convs.get(curConv); if (!c) return; setConvTimer(c, Number($("#ciTimer").value) || 0); $("#ciTimerLbl").textContent = timerName(convTimerOf(c)); };
+$("#ciTimerBtn").onclick = (e) => { if (e.target.tagName !== "SELECT") $("#ciTimer").focus(); };
+$("#ciWire").onclick = () => { showWire = !showWire; $("#ciWireState").textContent = showWire ? tr("开") : tr("关"); renderThread(); };
+$("#ciMembers").onclick = () => { const c = convs.get(curConv); if (!c || !c.group) return; $("#grpPanel").hidden = !$("#grpPanel").hidden; $("#grpName").value = c.name || ""; $("#grpMembers").innerHTML = `<div class="grp-m">${avatarHTML(pk, "mini")}${esc(nameOf(pk))} <span class="key">${tr("（我）")}</span></div>` + c.members.map((p) => `<div class="grp-m">${avatarHTML(p, "mini")}<b data-user="${p}">${esc(nameOf(p))}</b> <span class="key">${short(p)}</span></div>`).join(""); };
+$("#ciReset").onclick = () => { const c = convs.get(curConv); if (!c || c.group) return; rkResetSession(c.members[0]); toast(tr("已重置。下一条消息会重新协商密钥。")); openConvInfo(false); };
+$("#ciClear").onclick = () => { const c = convs.get(curConv); if (!c) return; for (const m of c.msgs.values()) if (m.wid) cache.del(m.wid); c.msgs.clear(); c.last = 0; $("#convInfo").hidden = true; renderConvs(); renderThread(); toast(tr("已清空本机记录")); };
+$("#ciHide").onclick = () => { const c = convs.get(curConv); if (!c) return; hiddenConvs.add(c.key); ls.set("tc-hidden-" + pk8(), JSON.stringify([...hiddenConvs])); $("#convInfo").hidden = true; curConv = null; $("#dm").classList.remove("open"); renderConvs(); $("#msgs").innerHTML = `<div class="sys">${tr("对话已隐藏。对方再发消息时会重新出现。")}</div>`; };
+$("#ciMute").onclick = () => { const c = convs.get(curConv); if (!c || c.group) return; $("#convInfo").hidden = true; toggleMute(c.members[0]); curConv = null; $("#dm").classList.remove("open"); renderConvs(); };
+$("#ciLeave").onclick = () => { $("#grpPanel").hidden = false; $("#grpLeave").click(); };
+$("#verifyBtn").onclick = () => { const c = convs.get(curConv); if (!c || c.group) return; const p = c.members[0]; verified.has(p) ? verified.delete(p) : verified.add(p); ls.set("tc-verified", JSON.stringify([...verified])); renderSafety(c); openConvInfo(true); renderThread(); };
+$("#safeScan").onclick = () => {
+  const c = convs.get(curConv); if (!c || c.group) return; const p = c.members[0];
+  $("#convInfo").hidden = true;
+  const cb = async (text) => {
+    const mine = (await safetyNumber(pk, p)).join(""), m = String(text).match(/^tcsafe:(\d{60})$/);
+    if (!m) return toast(tr("这不是安全码二维码"));
+    if (m[1] === mine) { verified.add(p); ls.set("tc-verified", JSON.stringify([...verified])); toast(tr("安全码一致，已标记为已验证 ✓")); renderThread(); }
+    else toast(tr("安全码不一致！你们之间可能有中间人，请不要继续发送敏感内容。"));
+  }; cb.raw = true; openScan(cb);
+};
+function setConvTimer(c, v) { convTimers[c.key] = v; ls.set("tc-timer-" + pk8(), JSON.stringify(convTimers)); renderThread(); }
+let ctxPick = null;
+function openMenu(items, x, y, onPick, emojiFor) {
+  const c = $("#ctx"); ctxPick = onPick;
+  c.innerHTML = (emojiFor ? `<div class="ctx-emoji">${EMOJI.map((x) => `<button data-pick="emoji:${x}">${x}</button>`).join("")}</div>` : "") + items.map(([k, l, cls]) => `<button class="${cls || ""}" data-pick="${k}">${l}</button>`).join("");
+  c.hidden = false;
+  if (isMobile()) { c.classList.add("sheet-mode"); c.style.left = c.style.top = ""; }
+  else { c.classList.remove("sheet-mode"); const W = c.offsetWidth, H = c.offsetHeight; c.style.left = Math.min(x, window.innerWidth - W - 8) + "px"; c.style.top = Math.min(y, window.innerHeight - H - 8) + "px"; }
+}
+$("#thTimer").onclick = (e) => { const c = convs.get(curConv); if (!c) return; const r = e.currentTarget.getBoundingClientRect(); openMenu([[0, tr("阅后即焚：关")], [300, tr("5 分钟")], [3600, tr("1 小时")], [86400, tr("1 天")], [604800, tr("7 天")]], r.left, r.bottom + 4, (v) => setConvTimer(c, Number(v) || 0)); };
+/* 消息菜单：右键 / 长按 */
+function openMsgMenu(mid, x, y) {
+  const c = convs.get(curConv); const m = c && c.msgs.get(mid); if (!m || m.meta) return;
+  const items = [["reply", tr("回复")], m.text ? ["copy", tr("复制")] : null, ["info", tr("详情")], outbox.has(mid) ? ["retry", tr("重试发送")] : null, ["del", tr("从本机删除"), "danger"]].filter(Boolean);
+  openMenu(items, x, y, (k) => {
+    if (k.startsWith("emoji:")) return reactMsg(mid, k.slice(6));
+    if (k === "reply") { replyTo = m.id; $("#replyBarText").textContent = (m.me ? tr("你") : nameOf(m.from)) + ": " + msgPreview(m).slice(0, 80); $("#replyBar").hidden = false; $("#dmIn").focus(); }
+    else if (k === "copy") copy(m.text);
+    else if (k === "info") toast(`${new Date(m.at * 1000).toLocaleString(LOCALE())} · ${m.fs ? tr("前向保密") : "NIP-17"} · ${m.me ? (outbox.has(mid) ? queuedText() : m.status || tr("已送达")) : nameOf(m.from)}`);
+    else if (k === "retry") { probeRelays().then(() => flushOutbox(true)); }
+    else if (k === "del") { if (m.wid) cache.del(m.wid); c.msgs.delete(mid); renderThread(); renderConvs(); }
+  }, true);
+}
+$("#msgs").addEventListener("contextmenu", (e) => { const b = e.target.closest(".bub"); if (!b) return; e.preventDefault(); openMsgMenu(b.dataset.mid, e.clientX, e.clientY); });
+let msgLp = 0;
+$("#msgs").addEventListener("pointerdown", (e) => { const b = e.target.closest(".bub"); if (!b || e.pointerType === "mouse") return; msgLp = setTimeout(() => { msgLp = 0; openMsgMenu(b.dataset.mid, e.clientX, e.clientY); }, 450); });
+["pointerup", "pointermove", "pointercancel"].forEach((ev) => $("#msgs").addEventListener(ev, (e) => { if (ev === "pointermove" && msgLp && e.movementX === 0 && e.movementY === 0) return; clearTimeout(msgLp); msgLp = 0; }));
+/* 输入框：自动增高，Enter 发送，Shift+Enter 换行 */
+const dmIn = $("#dmIn");
+function dmGrow() { dmIn.style.height = "auto"; dmIn.style.height = Math.min(dmIn.scrollHeight, 160) + "px"; const has = !!dmIn.value.trim(); $("#dmSend").hidden = !has; $("#dmVoice").hidden = has; }
+dmIn.addEventListener("input", dmGrow);
+dmIn.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#dmForm").requestSubmit(); } });
 $("#dmForm").onsubmit = async (e) => {
   e.preventDefault(); const text = $("#dmIn").value.trim(); const c = convs.get(curConv); if (!text || !c) return;
-  $("#dmIn").value = "";
+  $("#dmIn").value = ""; dmGrow();
   const extra = replyTo ? [["e", replyTo, "", "reply"]] : []; const rt = replyTo; replyTo = null; $("#replyBar").hidden = true;
   await sendRumor(c, 14, text, extra, { text, replyTo: rt });
 };
 $("#replyBarX").onclick = () => { replyTo = null; $("#replyBar").hidden = true; };
 $("#dmSearch").oninput = () => { renderConvs(); renderThread(); };
 /* 群管理 */
-$("#grpBtn").onclick = () => { const c = convs.get(curConv); if (!c || !c.group) return; $("#grpPanel").hidden = !$("#grpPanel").hidden; $("#grpName").value = c.name || ""; $("#grpMembers").innerHTML = `<div class="grp-m">${avatarHTML(pk, "mini")}${esc(nameOf(pk))} <span class="key">${tr("（我）")}</span></div>` + c.members.map((p) => `<div class="grp-m">${avatarHTML(p, "mini")}<b data-user="${p}">${esc(nameOf(p))}</b> <span class="key">${short(p)}</span></div>`).join(""); };
 $("#grpRename").onclick = async () => { const c = convs.get(curConv); const n = $("#grpName").value.trim().slice(0, 40); if (!c || !n || n === c.name) return; c.name = n; c.nameAt = now(); await sendRumor(c, 14, tr("{0} 把群名改为「{1}」", nameOf(pk), n), [["subject", n], ["tc-meta", "rename"]], { text: tr("{0} 把群名改为「{1}」", nameOf(pk), n) }); renderConvs(); renderThread(); };
 $("#grpAddBtn").onclick = async () => {
   const c = convs.get(curConv); if (!c) return;
@@ -1757,6 +2034,30 @@ async function safetyNumber(a, b) {
   return out;
 }
 const msgPreview = (m) => (m.file ? (m.file.voice ? tr("〔语音〕") : fileLabel(m.file)) : m.text);
+const TICK1 = `<span class="tick"><svg viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1.5 6.5l3.5 3.5L11 3"/></svg></span>`;
+const TICK2 = (cls = "") => `<span class="tick ${cls}"><svg viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 6.5l3.5 3.5L11 3"/><path d="M6.5 9.5l1 1L15 3"/></svg></span>`;
+const TICK_WAIT = `<span class="tick"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.6"/><path d="M6 3.5V6l1.8 1.2"/></svg></span>`;
+const TICK_FAIL = `<span class="tick" style="color:#FA003F;font-weight:900">!</span>`;
+function tickHTML(m, c) {
+  if (!m.me) return "";
+  const st = outbox.has(m.id) ? "queued" : m.st || "sent";
+  if (st === "pending" || st === "queued") return TICK_WAIT;
+  if (st === "failed") return TICK_FAIL;
+  const readAt = c.group ? 0 : (c.readBy?.[c.members[0]] || 0);
+  return readAt && m.at <= readAt ? TICK2("read") : st === "partial" ? TICK1 : TICK2();
+}
+function whenShort(ts) {
+  const d = new Date(ts * 1000), t = new Date(), day = 86400000;
+  if (d.toDateString() === t.toDateString()) return d.toLocaleTimeString(LOCALE(), { hour: "2-digit", minute: "2-digit" });
+  if (t - d < 6 * day) return d.toLocaleDateString(LOCALE(), { weekday: "short" });
+  return d.toLocaleDateString(LOCALE(), { month: "numeric", day: "numeric" });
+}
+function dayLabel(ts) {
+  const d = new Date(ts * 1000), t = new Date(); const y = new Date(t); y.setDate(t.getDate() - 1);
+  if (d.toDateString() === t.toDateString()) return tr("今天");
+  if (d.toDateString() === y.toDateString()) return tr("昨天");
+  return d.toLocaleDateString(LOCALE(), { year: d.getFullYear() === t.getFullYear() ? undefined : "numeric", month: "long", day: "numeric", weekday: "short" });
+}
 function renderConvs() {
   const q = $("#dmSearch").value.trim().toLowerCase();
   let list = [...convs.values()].filter((c) => !hiddenConvs.has(c.key) && (c.group || !mutes.has(c.members[0])));
@@ -1764,53 +2065,59 @@ function renderConvs() {
   list.sort((a, b) => b.last - a.last);
   $("#convs").innerHTML = list.map((c) => {
     const last = [...c.msgs.values()].sort((a, b) => b.at - a.at)[0], un = convUnread(c);
-    const who = last ? (last.me ? tr("你：") : c.group ? nameOf(last.from) + ": " : "") : "";
-    return `<button class="conv ${c.key === curConv ? "on" : ""}" data-conv="${esc(c.key)}">${convAvatar(c)}
-      <div><b>${esc(convTitle(c))}${c.group ? ` <span class="key">· ${tr("{0} 人", c.members.length + 1)}</span>` : ""}</b><small>${last ? esc(who + msgPreview(last)) : tr("尚无消息")}</small></div>${un ? `<i class="badge-n unread">${un}</i>` : ""}</button>`;
+    const who = last ? (last.me ? "" : c.group ? nameOf(last.from) + ": " : "") : "";
+    return `<button class="conv ${c.key === curConv ? "on" : ""} ${un ? "un" : ""}" data-conv="${esc(c.key)}">${convAvatarPlain(c)}
+      <div><b>${esc(convTitle(c))}</b><span class="when">${last ? whenShort(last.at) : ""}</span><small>${last ? tickHTML(last, c) + "<span style=\"min-width:0;overflow:hidden;text-overflow:ellipsis\">" + esc(who + msgPreview(last)) + "</span>" : tr("尚无消息")}</small>${un ? `<span class="pill">${un > 99 ? "99+" : un}</span>` : convTimerOf(c) ? `<span class="pin">⏱ ${TIMER_LBL[convTimerOf(c)] || ""}</span>` : ""}</div></button>`;
   }).join("") || (q ? `<div class="room-note">${tr("没有匹配的对话")}</div>` : "");
+  $("#roomNote").hidden = list.length > 0 || !!q;
 }
+const LOCK_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>`;
 async function renderThread() {
   const c = convs.get(curConv);
   if (!c) return;
-  $("#thAv").innerHTML = convAvatar(c); $("#thName").textContent = convTitle(c);
-  $("#safeBtn").hidden = c.group; $("#grpBtn").hidden = !c.group;
-  if (c.group) { $("#thSub").className = "badge-u"; $("#thSub").textContent = tr("{0} 人加密群聊", c.members.length + 1); $("#safety").hidden = true; }
+  $("#thAv").innerHTML = convAvatarPlain(c); $("#thName").textContent = convTitle(c);
+  const fs = convIsFS(c);
+  if (c.group) { $("#thSub").className = "badge-u"; $("#thSub").innerHTML = `${LOCK_SVG}${tr("{0} 人 · 端到端加密", c.members.length + 1)}`; }
   else {
     const p = c.members[0], v = verified.has(p);
-    $("#thSub").className = v ? "badge-v" : "badge-u"; $("#thSub").textContent = v ? tr("✓ 安全码已验证") : tr("{0} · 未验证", short(p));
-    $("#verifyBtn").textContent = v ? tr("已验证 ✓") : tr("标记为已验证"); $("#verifyBtn").classList.toggle("done", v);
+    $("#thSub").className = v ? "badge-v" : "badge-u";
+    $("#thSub").innerHTML = `${LOCK_SVG}${v ? tr("已验证") : tr("未验证")} · ${fs ? `<span class="fs-badge">${tr("前向保密")}</span>` : tr("端到端加密")}`;
   }
+  const tv = convTimerOf(c); $("#thTimerLbl").hidden = !tv; $("#thTimerLbl").textContent = TIMER_LBL[tv] || ""; $("#thTimer").classList.toggle("on", !!tv);
   const t = now(), q = $("#dmSearch").value.trim().toLowerCase();
   let msgs = [...c.msgs.values()].filter((m) => !m.exp || m.exp > t).sort((a, b) => a.at - b.at);
   if (q) msgs = msgs.filter((m) => (m.text || "").toLowerCase().includes(q)); else msgs = msgs.slice(-300);
   const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
   const byId = (id) => c.msgs.get(id);
   const readAt = c.group ? 0 : (c.readBy?.[c.members[0]] || 0);
-  box.innerHTML = `<div class="sys">${c.group ? tr("群消息逐个加密发给每位成员。") : ""}${tr("消息经 NIP-17 加密：中继只能看到一个随机临时身份发来的乱码，看不到内容，也看不到是谁发的。")}</div>` +
-    msgs.map((m) => {
-      if (m.meta) return `<div class="sys">${esc(m.text)}</div>`;
-      const rp = m.replyTo ? byId(m.replyTo) : null;
-      const reacts = c.reacts?.get(m.id);
-      const rHTML = reacts && reacts.size ? `<div class="reacts">${[...new Map([...reacts.values()].map((e) => [e, [...reacts.values()].filter((x) => x === e).length]))].map(([e, n]) => `<span>${esc(e)}${n > 1 ? " " + n : ""}</span>`).join("")}</div>` : "";
-      const readMark = m.me && !c.group && readAt && m.at <= readAt ? " · " + tr("已读") : "";
-      return `<div class="bub ${m.me ? "mine" : "them"}" data-mid="${m.id}">${c.group && !m.me ? `<div class="from">${esc(nameOf(m.from))}</div>` : ""}${rp ? `<div class="rq">${esc((rp.me ? tr("你") : nameOf(rp.from)) + ": " + msgPreview(rp).slice(0, 80))}</div>` : m.replyTo ? `<div class="rq">${tr("〔引用〕")}</div>` : ""}${m.file ? fileHTML(c, m) : esc(m.text)}${showWire && m.wire ? `<div class="ct">${esc(m.wire.slice(0, 220))}…</div>` : ""}${rHTML}<div class="m">${m.exp ? "⏱ " : ""}${ICON.lock}${new Date(m.at * 1000).toLocaleString(LOCALE(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}${m.me && (m.status || outbox.has(m.id)) ? ` · <span class="status">${esc(outbox.has(m.id) ? queuedText() : m.status)}</span>` : ""}${m.me && outbox.has(m.id) ? ` <button class="retry" data-mretry="${m.id}">${tr("重试")}</button>` : ""}${readMark}</div><div class="bub-tools"><button data-mreply="${m.id}" title="${tr("回复")}">↩</button><button data-mreact="${m.id}" title="${tr("表情")}">☺</button></div></div>`;
-    }).join("");
+  let html = `<div class="sys enc">${LOCK_SVG}${fs ? tr("消息采用前向保密加密（双棘轮）：每条消息一把新密钥，私钥泄露也解不开历史消息。中继看不到内容，也看不到是谁发的。") : tr("消息经 NIP-17 加密：中继只能看到一个随机临时身份发来的乱码，看不到内容，也看不到是谁发的。")}</div>`;
+  if (c.undecryptable) html += `<div class="sys">${tr("{0} 条消息在另一台设备上接收，无法在此解密。", c.undecryptable)}</div>`;
+  let lastDay = "", prev = null;
+  msgs.forEach((m, i) => {
+    const day = new Date(m.at * 1000).toDateString();
+    if (day !== lastDay) { html += `<div class="date-sep">${dayLabel(m.at)}</div>`; lastDay = day; prev = null; }
+    if (m.meta) { html += `<div class="sys">${esc(m.text)}</div>`; prev = null; return; }
+    const next = msgs[i + 1], same = (x) => x && !x.meta && x.from === m.from && Math.abs(x.at - m.at) < 300 && new Date(x.at * 1000).toDateString() === day;
+    const g = same(prev) && same(next) ? "gm" : same(prev) ? "gl" : same(next) ? "gf" : "single";
+    prev = m;
+    const rp = m.replyTo ? byId(m.replyTo) : null;
+    const reacts = c.reacts?.get(m.id);
+    const rHTML = reacts && reacts.size ? `<div class="reacts">${[...new Map([...reacts.values()].map((e) => [e, [...reacts.values()].filter((x) => x === e).length]))].map(([e, n]) => `<span>${esc(e)}${n > 1 ? " " + n : ""}</span>`).join("")}</div>` : "";
+    const pending = m.me && (outbox.has(m.id) || m.st === "pending");
+    html += `<div class="bub ${m.me ? "mine" : "them"} ${g} ${pending ? "pending" : ""}" data-mid="${m.id}">${c.group && !m.me && (g === "gf" || g === "single") ? `<div class="from">${esc(nameOf(m.from))}</div>` : ""}${rp ? `<div class="rq">${esc((rp.me ? tr("你") : nameOf(rp.from)) + ": " + msgPreview(rp).slice(0, 80))}</div>` : m.replyTo ? `<div class="rq">${tr("〔引用〕")}</div>` : ""}${m.file ? fileHTML(c, m) : esc(m.text)}${showWire && m.wire ? `<div class="ct">${esc(m.wire.slice(0, 220))}…</div>` : ""}${rHTML}<div class="m">${m.exp ? "⏱ " : ""}${new Date(m.at * 1000).toLocaleTimeString(LOCALE(), { hour: "2-digit", minute: "2-digit" })}${tickHTML(m, c)}${m.me && outbox.has(m.id) ? ` <button class="retry" data-mretry="${m.id}">${tr("重试")}</button>` : ""}</div></div>`;
+  });
+  box.innerHTML = html;
   if (atBottom) box.scrollTop = box.scrollHeight;
   if (tab === "dm" && !document.hidden) {
     const latest = msgs.length ? msgs[msgs.length - 1].at : 0;
     if (latest > (readState[c.key] || 0)) { readState[c.key] = latest; saveRead(); updateBadges(); renderConvs(); }
     if (!c.group) sendReadReceipt(c);
   }
-  if (!c.group) { const digits = await safetyNumber(pk, c.members[0]); if (curConv === c.key) $("#digits").innerHTML = digits.map((d) => `<span>${d}</span>`).join(""); }
 }
 $("#msgs").addEventListener("click", (e) => {
-  const b = e.target.closest("button[data-mreply],button[data-mreact],button[data-emoji],button[data-mretry],img[data-lbdm]"); if (!b) return;
-  const c = convs.get(curConv); if (!c) return;
+  const b = e.target.closest("button[data-mretry],img[data-lbdm]"); if (!b) return;
   if (b.dataset.lbdm) { openLightbox([b.dataset.lbdm], 0); return; }
-  if (b.dataset.mretry) { b.disabled = true; probeRelays().then(() => flushOutbox(true)).then(() => { if (outbox.has(b.dataset.mretry)) toast(tr("当前没有连上任何中继，请检查网络或开启 VPN。消息已排队，联网后会自动重发。")); }); return; }
-  if (b.dataset.mreply) { const m = c.msgs.get(b.dataset.mreply); if (!m) return; replyTo = m.id; $("#replyBarText").textContent = (m.me ? tr("你") : nameOf(m.from)) + ": " + msgPreview(m).slice(0, 80); $("#replyBar").hidden = false; $("#dmIn").focus(); }
-  else if (b.dataset.mreact) { const host = b.closest(".bub"); let pick = host.querySelector(".emoji-pick"); if (pick) { pick.remove(); return; } pick = document.createElement("div"); pick.className = "emoji-pick"; pick.innerHTML = EMOJI.map((x) => `<button data-emoji="${x}" data-for="${b.dataset.mreact}">${x}</button>`).join(""); host.append(pick); }
-  else if (b.dataset.emoji) reactMsg(b.dataset.for, b.dataset.emoji);
+  if (b.dataset.mretry) { b.disabled = true; probeRelays().then(() => flushOutbox(true)).then(() => { if (outbox.has(b.dataset.mretry)) toast(tr("当前没有连上任何中继，请检查网络或开启 VPN。消息已排队，联网后会自动重发。")); }); }
 });
 
 /* ======================= 个人档案 ======================= */
@@ -1893,6 +2200,12 @@ $("#pinRemove").onclick = async () => {
 };
 $("#notifBtn").onclick = async () => {
   try { const r = await Notification.requestPermission(); toast(r === "granted" ? tr("已开启通知") : tr("通知没有开启，可以在系统设置里打开")); updateBadges(); } catch (e) { toast(tr("这个浏览器不支持通知")); }
+};
+$("#optFs").onchange = async () => {
+  const v = $("#optFs").value; ls.set("tc-fs", v);
+  if (v === "1") { await rkPublishBundle(true); toast(tr("已开启前向保密。对方的下一条消息起生效。")); }
+  else if (rkStore) { await publish({ kind: 5, created_at: now(), content: "", tags: [["a", `${RK_KIND}:${pk}:${rkStore.dev}`], ["k", String(RK_KIND)]] }); toast(tr("已切换为多设备同步模式。")); }
+  if (curConv) renderThread();
 };
 $("#saveKey").onclick = () => { const v = $("#apiKey").value.trim(); ls.set(KEY_SLOT, v); toast(v ? tr("API Key 已保存在本机") : tr("已清空")); };
 $("#clearKey").onclick = () => { $("#apiKey").value = ""; ls.del(KEY_SLOT); toast(tr("API Key 已清除")); };
