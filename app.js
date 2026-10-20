@@ -73,6 +73,11 @@ function applyLang() {
   fillLangSelects();
   translateStatic();
   if (window.tcApp && window.tcApp.setLang) window.tcApp.setLang(LANG);
+  // iPhone「添加到主屏幕」的名字与 PWA 清单随界面语言切换：中文叫天窗，其他语言叫 Skylight
+  const zh = LANG.startsWith("zh"), m = document.querySelector('meta[name="apple-mobile-web-app-title"]'), mf = document.querySelector('link[rel="manifest"]');
+  if (m) m.content = APP();
+  if (mf) mf.href = zh ? "manifest.webmanifest" : "manifest-en.webmanifest";
+  if (!document.title.startsWith("(")) document.title = APP();
 }
 function setLang(l) {
   if (!LANGS.some((x) => x[0] === l) || l === LANG) return;
