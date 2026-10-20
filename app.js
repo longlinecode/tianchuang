@@ -276,6 +276,7 @@ async function start() {
   try { readState = JSON.parse(ls.get("tc-read-" + pk8(), "{}")) || {}; } catch (e) { readState = {}; }
   readState.__init = init;
   try { hiddenConvs = new Set(JSON.parse(ls.get("tc-hidden-" + pk8(), "[]"))); } catch (e) {}
+  loadOutbox();
   $("#fWot").checked = ls.get("tc-wot", "0") === "1";
   $("#optReceipts").checked = ls.get("tc-receipts", "1") === "1";
   renderMe();
@@ -460,8 +461,10 @@ async function probeRelays() {
 function refreshRelayState() {
   if (!pool) return;
   const m = pool.listConnectionStatus();
-  for (const u of relays) { const s = relayState.get(u) || {}; const live = m.get(u) ?? m.get(u + "/"); if (live === false && s.ok) relayState.set(u, { ok: false, ms: null }); if (live === true && !s.ok) relayState.set(u, { ok: true, ms: s.ms }); }
+  let cameUp = false;
+  for (const u of relays) { const s = relayState.get(u) || {}; const live = m.get(u) ?? m.get(u + "/"); if (live === false && s.ok) relayState.set(u, { ok: false, ms: null }); if (live === true && !s.ok) { relayState.set(u, { ok: true, ms: s.ms }); cameUp = true; } }
   renderNet();
+  if (cameUp) flushOutbox(false);
 }
 function renderNet() {
   const up = relays.filter((u) => relayState.get(u)?.ok).length;
@@ -1539,6 +1542,38 @@ async function dmRelaysOf(p) {
   try { const ev = await pool.get(relays, { kinds: [10050], authors: [p] }, { maxWait: 3000 }); const r = (ev?.tags || []).filter((t) => t[0] === "relay" && /^wss:\/\/[^\s]+$/.test(t[1])).map((t) => t[1]); if (r.length) out = r.slice(0, 5); } catch (e) {}
   dmRelayCache.set(p, out); return out;
 }
+/* ---------- 待发送队列：中继全部不可达时先排队，网络恢复后自动重发 ---------- */
+let outbox = new Map();   // rumorId -> { conv, items: [{ p, w, target, self }] }
+const outboxKey = () => "tc-outbox-" + pk8();
+function loadOutbox() { try { outbox = new Map(JSON.parse(ls.get(outboxKey(), "[]"))); } catch (e) { outbox = new Map(); } }
+function saveOutbox() { ls.set(outboxKey(), JSON.stringify([...outbox])); }
+const relaysUp = () => relays.filter((u) => relayState.get(u)?.ok).length;
+const queuedText = () => tr("待发送 · 联网后自动重发");
+let flushing = false;
+async function flushOutbox(manual) {
+  if (flushing || !outbox.size || !pool) return;
+  if (!relaysUp() && !manual) return;
+  flushing = true; let sent = 0;
+  try {
+    for (const [id, o] of [...outbox]) {
+      const left = [];
+      for (const it of o.items) {
+        const exp = Number((it.w.tags.find((t) => t[0] === "expiration") || [])[1]) || 0;
+        if (exp && exp < now()) continue;   // 阅后即焚已过期，直接丢弃
+        const res = await Promise.allSettled(pool.publish(it.target, it.w));
+        if (!res.some((x) => x.status === "fulfilled")) left.push(it);
+      }
+      const stillTo = left.filter((it) => !it.self);
+      if (stillTo.length) o.items = left; else outbox.delete(id);
+      const m = convs.get(o.conv)?.msgs.get(id);
+      if (m) { m.status = stillTo.length ? queuedText() : tr("已送达"); if (!stillTo.length) sent++; }
+    }
+  } finally { flushing = false; saveOutbox(); schedule(); }
+  if (sent) toast(tr("已重发 {0} 条排队消息", sent));
+}
+setInterval(() => flushOutbox(false), 30000);
+window.addEventListener("online", () => setTimeout(() => flushOutbox(true), 1500));
+
 async function sendRumor(c, kind, content, extraTags = [], local = {}) {
   const exp = Number($("#timer").value) || 0;
   const tags = [...c.members.map((p) => ["p", p]), ...extraTags];
@@ -1548,18 +1583,25 @@ async function sendRumor(c, kind, content, extraTags = [], local = {}) {
   const isMsg = kind === 14 || kind === 15;
   const msg = { id: rumor.id, me: true, from: pk, at: rumor.created_at, exp: exp ? now() + exp : 0, status: tr("发送中"), replyTo: (extraTags.find((t) => t[0] === "e") || [])[1] || null, meta: extraTags.some((t) => t[0] === "tc-meta"), ...local };
   if (isMsg) addMsg(c.key, c.members, msg);
-  let ok = 0;
+  let ok = 0; const failed = [];
   await Promise.all(c.members.filter((p) => p !== pk).map(async (p) => {
     const w = giftWrap(rumor, p, exp);
     if (!msg.wire) msg.wire = w.content;
     const target = [...new Set([...(await dmRelaysOf(p)), ...relays])];
     const res = await Promise.allSettled(pool.publish(target, w));
-    if (res.some((x) => x.status === "fulfilled")) ok++;
+    if (res.some((x) => x.status === "fulfilled")) ok++; else failed.push({ p, w, target });
   }));
   const self = giftWrap(rumor, pk, exp); seenWraps.add(self.id); if (isMsg) cache.put(self);
-  Promise.allSettled(pool.publish(relays, self));
+  Promise.allSettled(pool.publish(relays, self)).then((res) => {
+    // 自己的副本也发不出去（其他设备就同步不到）：一并排队
+    if (isMsg && !res.some((x) => x.status === "fulfilled") && outbox.has(rumor.id)) { outbox.get(rumor.id).items.push({ p: pk, w: self, target: relays, self: true }); saveOutbox(); }
+  });
   const n = c.members.filter((p) => p !== pk).length;
-  msg.status = !n ? tr("已保存") : ok === n ? tr("已送达") : ok ? tr("已送达 {0}/{1} 人", ok, n) : tr("发送失败");
+  if (isMsg && failed.length) {
+    outbox.set(rumor.id, { conv: c.key, items: failed }); saveOutbox();
+    msg.status = queuedText();
+    toast(relaysUp() ? tr("中继暂时未接收，消息已排队，稍后自动重发。") : tr("当前没有连上任何中继，请检查网络或开启 VPN。消息已排队，联网后会自动重发。"));
+  } else msg.status = !n ? tr("已保存") : ok === n ? tr("已送达") : ok ? tr("已送达 {0}/{1} 人", ok, n) : tr("发送失败");
   if (isMsg) schedule();
   return ok;
 }
@@ -1751,7 +1793,7 @@ async function renderThread() {
       const reacts = c.reacts?.get(m.id);
       const rHTML = reacts && reacts.size ? `<div class="reacts">${[...new Map([...reacts.values()].map((e) => [e, [...reacts.values()].filter((x) => x === e).length]))].map(([e, n]) => `<span>${esc(e)}${n > 1 ? " " + n : ""}</span>`).join("")}</div>` : "";
       const readMark = m.me && !c.group && readAt && m.at <= readAt ? " · " + tr("已读") : "";
-      return `<div class="bub ${m.me ? "mine" : "them"}" data-mid="${m.id}">${c.group && !m.me ? `<div class="from">${esc(nameOf(m.from))}</div>` : ""}${rp ? `<div class="rq">${esc((rp.me ? tr("你") : nameOf(rp.from)) + ": " + msgPreview(rp).slice(0, 80))}</div>` : m.replyTo ? `<div class="rq">${tr("〔引用〕")}</div>` : ""}${m.file ? fileHTML(c, m) : esc(m.text)}${showWire && m.wire ? `<div class="ct">${esc(m.wire.slice(0, 220))}…</div>` : ""}${rHTML}<div class="m">${m.exp ? "⏱ " : ""}${ICON.lock}${new Date(m.at * 1000).toLocaleString(LOCALE(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}${m.me && m.status ? ` · <span class="status">${esc(m.status)}</span>` : ""}${readMark}</div><div class="bub-tools"><button data-mreply="${m.id}" title="${tr("回复")}">↩</button><button data-mreact="${m.id}" title="${tr("表情")}">☺</button></div></div>`;
+      return `<div class="bub ${m.me ? "mine" : "them"}" data-mid="${m.id}">${c.group && !m.me ? `<div class="from">${esc(nameOf(m.from))}</div>` : ""}${rp ? `<div class="rq">${esc((rp.me ? tr("你") : nameOf(rp.from)) + ": " + msgPreview(rp).slice(0, 80))}</div>` : m.replyTo ? `<div class="rq">${tr("〔引用〕")}</div>` : ""}${m.file ? fileHTML(c, m) : esc(m.text)}${showWire && m.wire ? `<div class="ct">${esc(m.wire.slice(0, 220))}…</div>` : ""}${rHTML}<div class="m">${m.exp ? "⏱ " : ""}${ICON.lock}${new Date(m.at * 1000).toLocaleString(LOCALE(), { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}${m.me && (m.status || outbox.has(m.id)) ? ` · <span class="status">${esc(outbox.has(m.id) ? queuedText() : m.status)}</span>` : ""}${m.me && outbox.has(m.id) ? ` <button class="retry" data-mretry="${m.id}">${tr("重试")}</button>` : ""}${readMark}</div><div class="bub-tools"><button data-mreply="${m.id}" title="${tr("回复")}">↩</button><button data-mreact="${m.id}" title="${tr("表情")}">☺</button></div></div>`;
     }).join("");
   if (atBottom) box.scrollTop = box.scrollHeight;
   if (tab === "dm" && !document.hidden) {
@@ -1762,9 +1804,10 @@ async function renderThread() {
   if (!c.group) { const digits = await safetyNumber(pk, c.members[0]); if (curConv === c.key) $("#digits").innerHTML = digits.map((d) => `<span>${d}</span>`).join(""); }
 }
 $("#msgs").addEventListener("click", (e) => {
-  const b = e.target.closest("button[data-mreply],button[data-mreact],button[data-emoji],img[data-lbdm]"); if (!b) return;
+  const b = e.target.closest("button[data-mreply],button[data-mreact],button[data-emoji],button[data-mretry],img[data-lbdm]"); if (!b) return;
   const c = convs.get(curConv); if (!c) return;
   if (b.dataset.lbdm) { openLightbox([b.dataset.lbdm], 0); return; }
+  if (b.dataset.mretry) { b.disabled = true; probeRelays().then(() => flushOutbox(true)).then(() => { if (outbox.has(b.dataset.mretry)) toast(tr("当前没有连上任何中继，请检查网络或开启 VPN。消息已排队，联网后会自动重发。")); }); return; }
   if (b.dataset.mreply) { const m = c.msgs.get(b.dataset.mreply); if (!m) return; replyTo = m.id; $("#replyBarText").textContent = (m.me ? tr("你") : nameOf(m.from)) + ": " + msgPreview(m).slice(0, 80); $("#replyBar").hidden = false; $("#dmIn").focus(); }
   else if (b.dataset.mreact) { const host = b.closest(".bub"); let pick = host.querySelector(".emoji-pick"); if (pick) { pick.remove(); return; } pick = document.createElement("div"); pick.className = "emoji-pick"; pick.innerHTML = EMOJI.map((x) => `<button data-emoji="${x}" data-for="${b.dataset.mreact}">${x}</button>`).join(""); host.append(pick); }
   else if (b.dataset.emoji) reactMsg(b.dataset.for, b.dataset.emoji);
@@ -1858,7 +1901,7 @@ $("#saveRelays").onclick = () => {
   const list = parse($("#relayList").value); if (!list.length) return toast(tr("至少需要一个 wss:// 开头的中继"));
   relays = list; searchRelays = parse($("#srelayList").value);
   ls.set("tc-relays", JSON.stringify(relays)); ls.set("tc-srelays", JSON.stringify(searchRelays));
-  relayState.clear(); dmRelayCache.clear(); probeRelays(); subscribeMain(); toast(tr("已重连")); $("#settings").hidden = true;
+  relayState.clear(); dmRelayCache.clear(); probeRelays().then(() => flushOutbox(true)); subscribeMain(); toast(tr("已重连")); $("#settings").hidden = true;
 };
 $("#resetRelays").onclick = () => { $("#relayList").value = DEFAULT_RELAYS.join("\n"); $("#srelayList").value = DEFAULT_SEARCH.join("\n"); };
 $("#themeSeg").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; applyTheme(b.dataset.th); ls.set("tc-theme", b.dataset.th); };
