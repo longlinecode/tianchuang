@@ -1,6 +1,6 @@
 天窗 0.6.0
-代码指纹：58b08f5f718829a2
+代码指纹：6a10c4098647e50c
 计算方法：sha256(app.js + vendor/nostr.bundle.js + vendor/i18n.js) 的前 16 位
-app.js  sha384: sha384-rlZ8XobuNl8RnauKJsmaZifUKSw5B/V5ulIV7yBq5qB41XkSwG2Id/6fiAKeksSZ
+app.js  sha384: sha384-/7oRjDB/c9PBFBXQUxURODgMaDzZ86QyxfULVzCTKeI+ydh3BK4uxb4TmtvRiynS
 nostr.bundle.js sha384: sha384-7QhkjSj3gv2n85FuieRm3v1PhqM4Ux9EELcYHVSkMiCw+Y6DMhCNnHpkPHRjYmcN
 i18n.js sha384: sha384-9rM6+rsA36cTj6Re4x/+Yg8KV+4R+hdYq+GXB9a0uYE4o0vrue3MN2x30vX+J/vJ
