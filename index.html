@@ -282,6 +282,7 @@ body.mac-app .nav{padding-top:4px}
 .newchat button{border:0;background:var(--ink);color:var(--on-ink);border-radius:999px;padding:0 12px;font-size:13px;font-weight:700}
 .bub .ct{white-space:pre-wrap}
 .status{font-size:11px}
+.bub .retry{font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;opacity:.9}.bub .retry:disabled{opacity:.4}
 .trend button{all:unset;cursor:pointer;display:block}
 .trend button b{display:block;color:var(--fg);font-size:15px}
 .follow-box{display:flex;gap:6px;margin-top:8px}
@@ -773,7 +774,7 @@ body.mac-app .lb-x{top:40px}
       <p class="foot" style="margin:10px 0 0">每条内容都用你的私钥签名，同时写入以上所有中继。任何一个中继下线或删帖，其余中继仍有副本。</p>
     </div>
     <div class="lang-row"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><select class="lang-sel" id="langSide" aria-label="Language"></select></div>
-    <p class="foot"><span>天窗</span> 0.5.0 · <span>基于 Nostr 协议</span></p>
+    <p class="foot"><span>天窗</span> 0.5.1 · <span>基于 Nostr 协议</span></p>
   </aside>
 </div>
 
@@ -1013,7 +1014,7 @@ body.mac-app .lb-x{top:40px}
     <div class="seg" id="themeSeg"><button data-th="">跟随系统</button><button data-th="light">浅色</button><button data-th="dark">深色</button></div>
     <hr>
     <button class="ghost" id="logout" style="justify-self:start;color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent)">退出账号（从本机删除私钥）</button>
-    <p class="hint"><span>天窗</span> 0.5.0 · <span>代码指纹</span> <span class="mono-in">2373 4681 36bb f0ec</span><br><span>指纹和 GitHub 仓库里 FINGERPRINT.txt 一致，说明你运行的代码没被替换。</span></p>
+    <p class="hint"><span>天窗</span> 0.5.1 · <span>代码指纹</span> <span class="mono-in">53b5 228b bcf5 9652</span><br><span>指纹和 GitHub 仓库里 FINGERPRINT.txt 一致，说明你运行的代码没被替换。</span></p>
     <button class="ghost close" id="closeSettings">完成</button>
   </div>
 </div>
@@ -1024,6 +1025,6 @@ body.mac-app .lb-x{top:40px}
 <script src="vendor/purify.min.js" integrity="sha384-JEyTNhjM6R1ElGoJns4U2Ln4ofPcqzSsynQkmEc/KGy6336qAZl70tDLufbkla+3"></script>
 <script src="vendor/qrcode.js" integrity="sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k"></script>
 <script src="vendor/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx"></script>
-<script src="vendor/i18n.js" integrity="sha384-PWrUUdiqY8F/MZOSw4ik+Rx4uIPo96gEEuZ7jk2jA1uvPj0kr5kbQ5daYeKAf1wY"></script>
-<script src="app.js" integrity="sha384-Cag9uyKyhmxOOg0E/WJ2dJn16KBoqkh1Oc/ShMIanlYQD5d+LGAs6rUxYoL94eaa"></script>
+<script src="vendor/i18n.js" integrity="sha384-Ko9jkaSj04KR3yNmqQZqCD3UUkT41smiPgMcCKM7ZPHCJAYLiOd14skN52P0zFUD"></script>
+<script src="app.js" integrity="sha384-1++r1xvOfXsxMP+dmQq5tm92pRV6uyMhsAqUPM2Ui9OEwLuBrRcwPBNIVlp3xgEJ"></script>
 </body></html>
