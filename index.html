@@ -631,6 +631,123 @@ body.mac-app .lb-x{top:40px}
 }
 @media (max-width:1100px){.mini-tools{display:none}}
 </style>
+<style>
+/* ===== 0.6 私信：Signal 式交互 ===== */
+.dm-head{display:flex;align-items:center;gap:8px;padding:14px 12px 10px 16px}
+.dm-head h2{flex:1}
+.dm-head .e2e{display:none}
+.icon-btn.round{width:36px;height:36px;padding:0;border:0;border-radius:999px;display:inline-grid;place-items:center;color:var(--fg);flex:none;position:relative}
+.icon-btn.round:hover{background:var(--surface)}
+.icon-btn.round.on{color:var(--green)}
+.dm-search{padding:0 12px 8px;border-bottom:0}
+.dm-search input{padding:8px 14px;font-size:14px}
+.conv{padding:10px 12px;border-bottom:0;border-radius:12px;margin:0 6px;gap:12px}
+.conv .avatar,.conv img.avatar{width:50px;height:50px;font-size:17px;flex:none}
+.conv>div:not(.avatar){display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;column-gap:8px;align-items:center}
+.conv b{font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv .when{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.conv.un .when{color:var(--green);font-weight:700}
+.conv small{font-size:13px;grid-column:1;display:flex;align-items:center;gap:4px}
+.conv small .tick{display:inline-flex;flex:none;color:var(--muted)}
+.conv small .tick.read{color:var(--green)}
+.conv .pill{grid-column:2;grid-row:2;background:var(--green);color:#fff;font-size:11px;font-weight:700;border-radius:999px;min-width:20px;height:20px;padding:0 6px;display:grid;place-items:center;justify-self:end}
+.conv .pin{grid-column:2;grid-row:2;font-size:11px;color:var(--muted);justify-self:end}
+.conv.un b{font-weight:900}
+.conv.on{box-shadow:none;background:var(--green-soft)}
+.conv .unread{display:none}
+.room-note{text-align:center;padding:24px 20px;line-height:1.6}
+/* 顶栏 */
+.th-top{padding:8px 10px;gap:6px}
+.th-id{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;flex:1;min-width:0;padding:4px 6px;border-radius:12px}
+.th-id:hover{background:var(--surface)}
+.th-id .avatar,.th-id img.avatar{width:38px;height:38px;font-size:14px}
+.th-id .grow{min-width:0}
+.th-id b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px;line-height:1.2}
+.th-id .badge-u,.th-id .badge-v{display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.th-id .badge-v svg,.th-id .badge-u svg{width:11px;height:11px;flex:none}
+#thTimerLbl{position:absolute;right:2px;bottom:2px;font-size:9px;font-weight:900;background:var(--green);color:#fff;border-radius:999px;padding:0 4px;line-height:14px}
+.th-top .back{border:0;padding:0;width:34px;height:34px;display:grid;place-items:center}
+/* 消息区 */
+.msgs{gap:2px;padding:12px 14px 16px}
+.sys{margin:6px 0;font-size:12px;line-height:1.5;background:none;color:var(--muted);padding:2px 10px}
+.sys.enc{background:var(--surface);border-radius:12px;padding:8px 14px}
+.sys.enc svg{width:12px;height:12px;vertical-align:-2px;margin-right:4px}
+.date-sep{align-self:center;font-size:11px;font-weight:700;color:var(--muted);background:var(--surface);border-radius:999px;padding:3px 12px;margin:10px 0 6px}
+.bub{max-width:min(78%,560px);padding:7px 12px 6px;border-radius:18px;font-size:15px;line-height:1.4;margin-top:1px}
+.bub.them{border-bottom-left-radius:18px}.bub.mine{border-bottom-right-radius:18px}
+.bub.them.gl{border-bottom-left-radius:5px}.bub.them.gm{border-top-left-radius:5px;border-bottom-left-radius:5px}.bub.them.gf{border-bottom-left-radius:5px}
+.bub.mine.gl{border-bottom-right-radius:5px}.bub.mine.gm{border-top-right-radius:5px;border-bottom-right-radius:5px}.bub.mine.gf{border-bottom-right-radius:5px}
+.bub.them.gf,.bub.them.gm,.bub.mine.gf,.bub.mine.gm{margin-bottom:0}
+.bub.gl,.bub.single{margin-bottom:8px}
+.bub .m{gap:4px;font-size:10.5px;margin-top:3px;opacity:.7;float:right;margin-left:10px;position:relative;top:4px}
+.bub .m .tick{display:inline-flex}
+.bub .m .tick svg{width:14px;height:11px}
+.bub .m .tick.read{opacity:1;color:#fff}
+.bub.them .m .tick{display:none}
+.bub .m .status{display:none}
+.bub .m .retry{display:inline-block}
+.bub::after{content:"";display:block;clear:both}
+.bub .rq{border-left:3px solid currentColor;background:rgba(0,0,0,.08);border-radius:6px;padding:4px 8px;margin:-2px -4px 6px;font-size:12.5px}
+.bub.mine .rq{background:rgba(255,255,255,.18);border-color:#fff}
+.bub .from{color:var(--green);font-size:12px;font-weight:700}
+.bub.mine .from{display:none}
+.bub.pending{opacity:.6}
+.bub-tools{display:none!important}
+.emoji-pick{position:absolute;bottom:100%;margin-bottom:4px;z-index:5}
+.bub.mine .emoji-pick{right:0}
+.bub.them .emoji-pick{left:0}
+.reacts{margin-top:2px;margin-bottom:-2px}
+.bub .file img,.bub .file video{border-radius:12px;margin:-2px -6px 4px}
+.lock-mini{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted)}
+.lock-mini svg{width:11px;height:11px}
+.fs-badge{color:var(--green)}
+/* 输入区 */
+.composer-dm{gap:6px;align-items:flex-end;padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));border-top:0;background:var(--bg)}
+.composer-dm .att{width:36px;height:36px;border:0;color:var(--muted);flex:none}
+.composer-dm .att:hover{background:var(--surface);color:var(--fg)}
+.composer-dm .att.on{color:var(--red)}
+.dm-field{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:7px 14px;display:flex}
+.dm-field:focus-within{border-color:var(--green)}
+.composer-dm textarea{flex:1;min-width:0;border:0;background:none;outline:none;resize:none;font:inherit;font-size:15px;line-height:1.4;max-height:160px;padding:0;color:var(--fg)}
+.composer-dm .send{width:36px;height:36px;padding:0;border:0;border-radius:999px;background:var(--green);color:#fff;display:grid;place-items:center;flex:none}
+[dir="rtl"] .composer-dm .send svg{transform:scaleX(-1)}
+.rec-hint{background:var(--bg)}
+/* 对话设置 */
+.sheet.ci{padding:16px}
+.ci-head{display:grid;justify-items:center;gap:6px;padding:8px 0 12px;text-align:center}
+.ci-head .avatar,.ci-head img.avatar{width:72px;height:72px;font-size:26px}
+.ci-head h2{margin:0;font-size:20px}
+.ci-head .mono{font-size:11px;color:var(--muted);word-break:break-all;max-width:100%}
+.ci-list{display:grid;gap:2px}
+.ci-row{all:unset;cursor:pointer;display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:12px;font-size:15px}
+.ci-row:hover{background:var(--surface)}
+.ci-row>span{flex:1;min-width:0;display:grid}
+.ci-row b{font-weight:600}
+.ci-row small{color:var(--muted);font-size:12px}
+.ci-row i{font-style:normal;color:var(--muted);font-size:13px}
+.ci-row.danger b{color:var(--red)}
+.ci-row select{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:4px 6px;font-size:13px;color:var(--fg)}
+.sheet.ci .safety{margin:6px 0 0}
+.sheet.ci .grp-panel{border:1px solid var(--line);border-radius:12px;margin-top:6px;background:none}
+.qr-wrap.small{width:150px;margin:0 auto}
+.qr-wrap.small svg{width:150px;height:150px;display:block;border-radius:8px}
+.sel-row{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px;margin:6px 0}
+.sel-row select{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:5px 8px;font-size:13px;color:var(--fg);max-width:60%}
+.ctx .ctx-emoji{display:flex;gap:2px;padding:4px 6px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.ctx .ctx-emoji button{padding:4px;font-size:20px;width:34px;height:34px;text-align:center}
+@media (max-width:860px){
+  .dm-head{padding-top:10px}
+  .conv{margin:0;border-radius:0;padding:10px 14px}
+  .msgs{padding:10px 10px 14px}
+  .bub{max-width:84%}
+  .th-top{padding:6px 6px}
+}
+</style>
+<style>
+.toast{border-radius:14px;max-width:min(86vw,520px);line-height:1.45;text-align:center}
+.composer-dm .att{background:none;color:var(--muted)}
+@media (min-width:861px){.th-top .back{display:none}}
+</style>
 
 </head><body>
 <div class="skyband" aria-hidden="true"></div>
@@ -677,50 +794,29 @@ body.mac-app .lb-x{top:40px}
 
     <section class="dm" id="dm" hidden>
       <div class="dm-list">
-        <div class="dm-head"><h2>私信</h2><span class="e2e"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>NIP-17 加密 · 中继看不到内容和收发双方</span></div>
-        <form class="newchat" id="newChat"><input id="newChatIn" placeholder="对方的 npub…" autocomplete="off"><button type="button" class="icon-btn" id="newChatScan" title="扫码">⌗</button><button>新对话</button></form>
-        <button class="link-btn" id="ngToggle" type="button">＋ 新建加密群聊</button>
-        <form class="newgroup" id="newGroup" hidden>
-          <input id="ngName" placeholder="群名，比如：宏观小组" maxlength="40">
-          <textarea id="ngMembers" placeholder="成员的 npub，每行一个"></textarea>
-          <button class="solid">创建群聊</button>
-        </form>
-        <div class="dm-search"><input id="dmSearch" placeholder="搜索消息" autocomplete="off"></div>
+        <div class="dm-head"><h2>私信</h2><span class="e2e" id="dmE2E"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>端到端加密</span><button class="icon-btn round" id="dmNew" title="新对话" aria-label="新对话"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button></div>
+        <div class="dm-search"><input id="dmSearch" placeholder="搜索" autocomplete="off"></div>
         <div id="convs"></div>
-        <div class="room-note" id="roomNote">把你的 npub 发给朋友，对方在天窗里点「新对话」粘贴即可开始加密聊天。</div>
+        <div class="room-note" id="roomNote">点右上角的笔，粘贴对方的 npub 或扫码，开始加密对话。</div>
       </div>
       <div class="thread">
         <div class="th-top">
-          <button class="icon-btn back" id="dmBack">‹ 返回</button>
-          <span id="thAv"><span class="avatar">?</span></span>
-          <div class="grow"><b id="thName">选择一个对话</b><div id="thSub" class="badge-u">—</div></div>
-          <select id="timer" title="阅后即焚">
-            <option value="0">阅后即焚：关</option><option value="3600">1 小时</option><option value="86400">1 天</option><option value="604800">7 天</option>
-          </select>
-          <button class="icon-btn" id="grpBtn" hidden>成员</button>
-          <button class="icon-btn" id="wire" title="查看中继上存的是什么">显示密文</button>
-          <button class="icon-btn" id="safeBtn">安全码</button>
+          <button class="icon-btn back" id="dmBack" aria-label="返回"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5l-7 7 7 7"/></svg></button>
+          <button class="th-id" id="thId" type="button"><span id="thAv"><span class="avatar">?</span></span><div class="grow"><b id="thName">选择一个对话</b><div id="thSub" class="badge-u">—</div></div></button>
+          <button class="icon-btn round" id="thTimer" title="阅后即焚" aria-label="阅后即焚"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6M12 2v3"/></svg><span id="thTimerLbl" hidden></span></button>
+          <button class="icon-btn round" id="thMore" title="对话设置" aria-label="对话设置"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
         </div>
-        <div class="safety" id="safety" hidden>
-          <p>和对方当面或通过其他渠道比对这 60 位数字。一致即说明你们加的是彼此的真实账号。</p>
-          <div class="digits" id="digits"></div>
-          <button class="verify" id="verifyBtn">标记为已验证</button>
-        </div>
-        <div class="grp-panel" id="grpPanel" hidden>
-          <div class="grp-row"><input id="grpName" placeholder="群名" maxlength="40"><button class="ghost" id="grpRename">改名</button></div>
-          <div id="grpMembers"></div>
-          <div class="grp-row"><input id="grpAdd" placeholder="拉人：粘贴 npub" autocomplete="off"><button class="ghost" id="grpAddBtn">加入</button></div>
-          <button class="ghost danger" id="grpLeave">退出群聊</button>
-        </div>
-        <div class="msgs" id="msgs"><div class="sys">从左侧选择一个对话，或粘贴对方的 npub 开始新对话。</div></div>
+        <select id="timer" hidden><option value="0">关</option><option value="300">5 分钟</option><option value="3600">1 小时</option><option value="86400">1 天</option><option value="604800">7 天</option></select>
+        <div class="msgs" id="msgs"><div class="sys">从左侧选择一个对话，或点右上角的笔开始新对话。</div></div>
         <div class="reply-bar" id="replyBar" hidden><span id="replyBarText"></span><button type="button" id="replyBarX">×</button></div>
         <form class="composer-dm" id="dmForm">
           <input type="file" id="dmFile" class="hidden-file">
-          <button type="button" class="icon-btn att" id="dmAttach" title="发送加密图片或文件"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7L14 4.5a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7.5"/></svg></button>
-          <button type="button" class="icon-btn att" id="dmVoice" title="按住说话"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
-          <input id="dmIn" placeholder="加密消息…" autocomplete="off"><button>发送</button>
+          <button type="button" class="icon-btn att" id="dmAttach" title="发送加密图片或文件" aria-label="附件"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
+          <div class="dm-field"><textarea id="dmIn" rows="1" placeholder="消息" enterkeyhint="send"></textarea></div>
+          <button type="button" class="icon-btn att" id="dmVoice" title="按住说话" aria-label="语音"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+          <button class="send" id="dmSend" hidden aria-label="发送"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 11.5L21 3l-7 18-2.5-7.5z"/></svg></button>
         </form>
-        <div class="rec-hint" id="recHint" hidden>正在录音… 松开发送，上滑取消</div>
+        <div class="rec-hint" id="recHint" hidden>正在录音… 松开发送，移开取消</div>
       </div>
     </section>
   </main>
@@ -774,7 +870,7 @@ body.mac-app .lb-x{top:40px}
       <p class="foot" style="margin:10px 0 0">每条内容都用你的私钥签名，同时写入以上所有中继。任何一个中继下线或删帖，其余中继仍有副本。</p>
     </div>
     <div class="lang-row"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg><select class="lang-sel" id="langSide" aria-label="Language"></select></div>
-    <p class="foot"><span>天窗</span> 0.5.1 · <span>基于 Nostr 协议</span></p>
+    <p class="foot"><span>天窗</span> 0.6.0 · <span>基于 Nostr 协议</span></p>
   </aside>
 </div>
 
@@ -952,6 +1048,52 @@ body.mac-app .lb-x{top:40px}
 </div>
 
 <!-- 长按 / 更多菜单 -->
+<!-- 新对话 -->
+<div class="scrim" id="newConv" hidden>
+  <div class="sheet" role="dialog" aria-labelledby="ncTitle">
+    <h2 id="ncTitle">新对话</h2>
+    <form class="newchat" id="newChat"><input id="newChatIn" placeholder="对方的 npub…" autocomplete="off"><button type="button" class="icon-btn" id="newChatScan" title="扫码">⌗</button><button>开始</button></form>
+    <p class="hint">也可以在对方的个人页点「私信」。</p>
+    <hr>
+    <div class="fl">新建加密群聊</div>
+    <form class="newgroup" id="newGroup">
+      <input id="ngName" placeholder="群名，比如：宏观小组" maxlength="40">
+      <textarea id="ngMembers" placeholder="成员的 npub，每行一个"></textarea>
+      <button class="solid">创建群聊</button>
+    </form>
+    <div class="row-btn"><button class="ghost close" id="ncClose" type="button">关闭</button></div>
+  </div>
+</div>
+<!-- 对话设置 -->
+<div class="scrim" id="convInfo" hidden>
+  <div class="sheet ci" role="dialog" aria-labelledby="ciName">
+    <div class="ci-head"><span id="ciAv"></span><h2 id="ciName"></h2><div class="mono" id="ciKey"></div><div id="ciEnc" class="badge-v"></div></div>
+    <div class="ci-list">
+      <button class="ci-row" id="ciTimerBtn" type="button"><span><b>阅后即焚</b><small id="ciTimerLbl">关</small></span><select id="ciTimer"><option value="0">关</option><option value="300">5 分钟</option><option value="3600">1 小时</option><option value="86400">1 天</option><option value="604800">7 天</option></select></button>
+      <button class="ci-row" id="ciSafety" type="button"><span><b>安全码</b><small id="ciSafetyLbl">当面核对或扫码验证对方身份</small></span><i>›</i></button>
+      <button class="ci-row" id="ciWire" type="button"><span><b>查看密文</b><small>看看中继上存的是什么</small></span><i id="ciWireState">关</i></button>
+      <button class="ci-row" id="ciMembers" type="button"><span><b>群成员</b><small id="ciMembersLbl"></small></span><i>›</i></button>
+      <button class="ci-row" id="ciReset" type="button"><span><b>重置加密会话</b><small>对方换了设备或消息无法解密时使用</small></span></button>
+      <button class="ci-row" id="ciClear" type="button"><span><b>清空本机聊天记录</b><small>只删本机副本</small></span></button>
+      <button class="ci-row danger" id="ciHide" type="button"><span><b>隐藏对话</b></span></button>
+      <button class="ci-row danger" id="ciMute" type="button"><span><b>屏蔽这个人</b></span></button>
+      <button class="ci-row danger" id="ciLeave" type="button"><span><b>退出群聊</b></span></button>
+    </div>
+    <div class="safety" id="safety" hidden>
+      <p>和对方当面比对这 60 位数字，或互相扫码。一致即说明你们加的是彼此的真实账号，没有中间人。</p>
+      <div class="qr-wrap small" id="safeQr"></div>
+      <div class="digits" id="digits"></div>
+      <div class="row-btn" style="justify-content:space-between"><button class="ghost" id="safeScan" type="button">扫描对方的安全码</button><button class="verify" id="verifyBtn" type="button">标记为已验证</button></div>
+    </div>
+    <div class="grp-panel" id="grpPanel" hidden>
+      <div class="grp-row"><input id="grpName" placeholder="群名" maxlength="40"><button class="ghost" id="grpRename" type="button">改名</button></div>
+      <div id="grpMembers"></div>
+      <div class="grp-row"><input id="grpAdd" placeholder="拉人：粘贴 npub" autocomplete="off"><button class="ghost" id="grpAddBtn" type="button">加入</button></div>
+      <button class="ghost danger" id="grpLeave" type="button">退出群聊</button>
+    </div>
+    <div class="row-btn"><button class="ghost close" id="ciClose" type="button">关闭</button></div>
+  </div>
+</div>
 <div class="ctx" id="ctx" hidden></div>
 
 <!-- 个人档案 / 备份私钥 -->
@@ -994,6 +1136,8 @@ body.mac-app .lb-x{top:40px}
     <hr>
     <div class="fl">私信</div>
     <label class="chk"><input type="checkbox" id="optReceipts" checked> 发送已读回执（对方能看到你已读）</label>
+    <label class="sel-row"><span>加密方式</span><select id="optFs"><option value="1">前向保密（双棘轮，绑定本设备）</option><option value="0">多设备同步（NIP-17）</option></select></label>
+    <p class="hint" id="fsHint">前向保密：每条消息换一把密钥，私钥泄露也解不开历史消息；代价是私信只在收到它的这台设备上可读。多设备同步：同一身份的所有设备都能看到历史消息，但没有前向保密。</p>
     <hr>
     <div class="fl">屏蔽名单</div>
     <div class="mute-list" id="muteList"></div>
@@ -1014,7 +1158,7 @@ body.mac-app .lb-x{top:40px}
     <div class="seg" id="themeSeg"><button data-th="">跟随系统</button><button data-th="light">浅色</button><button data-th="dark">深色</button></div>
     <hr>
     <button class="ghost" id="logout" style="justify-self:start;color:var(--red);border-color:color-mix(in srgb,var(--red) 40%,transparent)">退出账号（从本机删除私钥）</button>
-    <p class="hint"><span>天窗</span> 0.5.1 · <span>代码指纹</span> <span class="mono-in">53b5 228b bcf5 9652</span><br><span>指纹和 GitHub 仓库里 FINGERPRINT.txt 一致，说明你运行的代码没被替换。</span></p>
+    <p class="hint"><span>天窗</span> 0.6.0 · <span>代码指纹</span> <span class="mono-in">58b0 8f5f 7188 29a2</span><br><span>指纹和 GitHub 仓库里 FINGERPRINT.txt 一致，说明你运行的代码没被替换。</span></p>
     <button class="ghost close" id="closeSettings">完成</button>
   </div>
 </div>
@@ -1025,6 +1169,6 @@ body.mac-app .lb-x{top:40px}
 <script src="vendor/purify.min.js" integrity="sha384-JEyTNhjM6R1ElGoJns4U2Ln4ofPcqzSsynQkmEc/KGy6336qAZl70tDLufbkla+3"></script>
 <script src="vendor/qrcode.js" integrity="sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k"></script>
 <script src="vendor/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx"></script>
-<script src="vendor/i18n.js" integrity="sha384-Ko9jkaSj04KR3yNmqQZqCD3UUkT41smiPgMcCKM7ZPHCJAYLiOd14skN52P0zFUD"></script>
-<script src="app.js" integrity="sha384-1++r1xvOfXsxMP+dmQq5tm92pRV6uyMhsAqUPM2Ui9OEwLuBrRcwPBNIVlp3xgEJ"></script>
+<script src="vendor/i18n.js" integrity="sha384-9rM6+rsA36cTj6Re4x/+Yg8KV+4R+hdYq+GXB9a0uYE4o0vrue3MN2x30vX+J/vJ"></script>
+<script src="app.js" integrity="sha384-rlZ8XobuNl8RnauKJsmaZifUKSw5B/V5ulIV7yBq5qB41XkSwG2Id/6fiAKeksSZ"></script>
 </body></html>
